@@ -12,6 +12,38 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 * Bulk insertion
 * Bulk removal
 
+## Basic Usage
+
+```
+var tree = rbush().load(data);
+var result = tree.search([40, 20, 80, 70]); // bbox in minX, minY, maxX, maxY format
+```
+
+### Data Format
+
+By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize that by redefining three methods &mdash; `sortX`, `sortY` and `toBBox`:
+
+```
+var tree = rbush();
+
+tree.sortX = function (a, b) { return a.bounds.minLng > b.bounds.minLng ? 1 : -1; };
+tree.sortY = function (a, b) { return a.bounds.minLat > b.bounds.minLat ? 1 : -1; };
+
+tree.toBBox = function (a) {
+	var b = a.bounds;
+	return [b.minLng, b.minLat, b.maxLng, b.maxLat];
+};
+
+tree.load([{
+	id: 'foo',
+	bounds: {
+		minLng: 30,
+		minLat: 50,
+		maxLng: 40,
+		maxLat: 60
+	}
+}, ...]);
+
 ## Papers
 
 * [R-trees: a Dynamic Index Structure For Spatial Searching](http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf)
