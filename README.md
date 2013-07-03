@@ -21,28 +21,16 @@ var result = tree.search([40, 20, 80, 70]); // bbox in minX, minY, maxX, maxY fo
 
 ### Data Format
 
-By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize that by redefining three methods &mdash; `sortX`, `sortY` and `toBBox`:
+By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize this by redefining `sortX`, `sortY` and `toBBox` methods like this:
 
 ```js
 var tree = rbush();
 
-tree.sortX = function (a, b) { return a.bounds.minLng > b.bounds.minLng ? 1 : -1; };
-tree.sortY = function (a, b) { return a.bounds.minLat > b.bounds.minLat ? 1 : -1; };
+tree.sortX  = function (a, b) { return a.minLng > b.minLng ? 1 : -1; };
+tree.sortY  = function (a, b) { return a.minLat > b.minLat ? 1 : -1; };
+tree.toBBox = function (a)    { return [a.minLng, a.minLat, a.maxLng, a.maxLat]; };
 
-tree.toBBox = function (a) {
-	var b = a.bounds;
-	return [b.minLng, b.minLat, b.maxLng, b.maxLat];
-};
-
-tree.load([{
-	id: 'foo',
-	bounds: {
-		minLng: 30,
-		minLat: 50,
-		maxLng: 40,
-		maxLat: 60
-	}
-}, ...]);
+tree.load([{id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60}, ...]);
 ```
 
 ## Papers
