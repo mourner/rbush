@@ -32,23 +32,23 @@ console.timeEnd('search');
 // console.timeEnd('naive search');
 
 
-// RTree
+RTree
 
-// var RTree = typeof require !== 'undefined' ? require('rtree') : RTree;
+var RTree = typeof require !== 'undefined' ? require('rtree') : RTree;
 
-// var tree2 = new RTree();
+var tree2 = new RTree();
 
-// var data2 = [];
-// for (var i = 0; i < N; i++) {
-// 	data2.push({x: data[i][0], y: data[i][1], w: 0, h: 0});
-// }
+var data2 = [];
+for (var i = 0; i < N; i++) {
+	data2.push({x: data[i][0], y: data[i][1], w: 0, h: 0});
+}
 
-// console.time('load 2');
-// for (var i = 0; i < N; i++) {
-// 	tree2.insert(data2[i]);
-// }
-// console.timeEnd('load 2');
+console.time('load 2');
+for (var i = 0; i < N; i++) {
+	tree2.insert(data2[i]);
+}
+console.timeEnd('load 2');
 
-// console.time('search 2');
-// var result = tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
-// console.timeEnd('search 2');
+console.time('search 2');
+var result = tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
+console.timeEnd('search 2');
