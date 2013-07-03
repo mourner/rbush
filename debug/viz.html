@@ -1,0 +1,51 @@
+<!doctype html>
+<canvas id="canvas" width="710" height="710" />
+<script src="../rbush.js"></script>
+<script>
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+
+    var N = 1000,
+        W = 700,
+        data = [];
+
+    for (var i = 0; i < N; i++) {
+        x = Math.random() * (W - 1);
+        y = Math.random() * (W - 1);
+        data.push([x, y, x + 1, y + 1]);
+    }
+
+    var tree = rbush().load(data);
+
+    var colors = ['red', 'green', 'blue', 'orange', 'purple'];
+
+    var rects = [];
+
+    function drawTree(node, level) {
+        var rect = [];
+        rect.push(colors[level % colors.length]);
+
+        rect.push([
+            Math.round(node.bbox[0]) + 0.5,
+            Math.round(node.bbox[1]) + 0.5,
+            Math.round(node.bbox[2] - node.bbox[0]),
+            Math.round(node.bbox[3] - node.bbox[1])
+        ]);
+
+        rects.push(rect);
+
+        if (node.leaf) return;
+        //if (level === 5) { return; }
+
+        for (var i = 0; i < node.children.length; i++) {
+            drawTree(node.children[i], level + 1);
+        }
+    }
+
+    drawTree(tree.data, 0);
+
+    for (var i = rects.length - 1; i >= 0; i--) {
+        ctx.strokeStyle = rects[i][0];
+        ctx.strokeRect.apply(ctx, rects[i][1]);
+    }
+</script>
