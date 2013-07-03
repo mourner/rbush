@@ -31,12 +31,12 @@ rbush.prototype = {
 		var N = data.length,               // number of items
 		    S = this._getNumTopSlices(N),  // number of slices for levels 0 and 1
 
-			N1 = Math.ceil(N / S),   // size of each root node
-			N2 = Math.ceil(N1 / S),  // size of each node of the second tree level
+		    N1 = Math.ceil(N / S),   // size of each root node
+		    N2 = Math.ceil(N1 / S),  // size of each node of the second tree level
 
-			items = data.slice().sort(this.sortX),
+		    items = data.slice().sort(this.sortX),
 
-			i, j, slice, slice2, node;
+		    i, j, slice, slice2, node;
 
 		this.data = {};
 		this.data.children = [];
@@ -59,10 +59,10 @@ rbush.prototype = {
 	_build: function (items, level) {
 
 		var node = {},
-			len = items.length,
-			M = this._maxFill,
-			k = Math.ceil(len / M), // size of each child node
-			i, slice, childNode;
+		    len = items.length,
+		    M = this._maxFill,
+		    k = Math.ceil(len / M), // size of each child node
+		    i, slice, childNode;
 
 		if (k < 2) {
 			node.children = items;
@@ -104,7 +104,7 @@ rbush.prototype = {
 
 	_getNumTopSlices: function (N) {
 		var M = this._maxFill,                             // max number of branches in one node
-			h = Math.ceil(Math.log(N) / Math.log(M)),      // target height of the tree
+		    h = Math.ceil(Math.log(N) / Math.log(M)),      // target height of the tree
 		    Ns = Math.pow(M, h - 1),                       // max number of tree nodes
 		    S = Math.floor(Math.sqrt(Math.ceil(N / Ns)));  // target number of level 0-1 branches
 
@@ -115,7 +115,7 @@ rbush.prototype = {
 		if (!this._intersects(bbox, node.bbox)) { return; }
 
 		var i, child,
-			len = node.children.length;
+		    len = node.children.length;
 
 		for (i = 0; i < len; i++) {
 			child = node.children[i];
