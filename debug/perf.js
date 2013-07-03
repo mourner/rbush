@@ -1,15 +1,15 @@
 var rbush = typeof require !== 'undefined' ? require('../rbush.js') : rbush;
 
 var data = [],
-	x, y;
+    x, y;
 
 var N = 1000000,
-	bbox = [49,72,51,74];
+    bbox = [49,72,51,74];
 
 for (var i = 0; i < N; i++) {
-	x = Math.random() * 99;
-	y = Math.random() * 99;
-	data[i] = [x, y, x + 1, y + 1];
+    x = Math.random() * 99;
+    y = Math.random() * 99;
+    data[i] = [x, y, x + 1, y + 1];
 }
 
 console.log('number: ' + N);
@@ -25,9 +25,9 @@ console.timeEnd('search');
 // console.time('naive search');
 // var result = [];
 // for (var i = 0; i < N; i++) {
-// 	if (tree._contains(bbox, data[i])) {
-// 		result.push(data[i]);
-// 	}
+//  if (tree._contains(bbox, data[i])) {
+//      result.push(data[i]);
+//  }
 // }
 // console.timeEnd('naive search');
 
@@ -40,12 +40,12 @@ var tree2 = new RTree();
 
 var data2 = [];
 for (var i = 0; i < N; i++) {
-	data2.push({x: data[i][0], y: data[i][1], w: 0, h: 0});
+    data2.push({x: data[i][0], y: data[i][1], w: 0, h: 0});
 }
 
 console.time('load 2');
 for (var i = 0; i < N; i++) {
-	tree2.insert(data2[i]);
+    tree2.insert(data2[i]);
 }
 console.timeEnd('load 2');
 
