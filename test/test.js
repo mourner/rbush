@@ -15,16 +15,12 @@ describe('rbush', function () {
 
 	describe('search', function () {
 		it('finds points given a bbox', function () {
-			console.log(JSON.stringify(tree.data));
-
 			var result = tree.search([40, 20, 80, 70]);
 
 			var sorted = [];
-
 			for (var i = 0; i < result.length; i++) {
 				sorted[i] = result[i][0] + ',' + result[i][1];
 			}
-
 			sorted.sort();
 
 			assert.deepEqual(sorted,

@@ -7,9 +7,9 @@ var N = 1000000,
 	bbox = [49,72,51,74];
 
 for (var i = 0; i < N; i++) {
-	x = Math.random() * 100;
-	y = Math.random() * 100;
-	data[i] = [x, y, x, y];
+	x = Math.random() * 99;
+	y = Math.random() * 99;
+	data[i] = [x, y, x + 1, y + 1];
 }
 
 console.log('number: ' + N);
