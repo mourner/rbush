@@ -15,7 +15,7 @@ rbush.prototype = {
 	sortY: function (a, b) { return a[1] > b[1] ? 1 : -1; },
 
 	// get bounding box in the form of [minX, minY, maxX, maxY] given a data item
-	getBBox: function (a) { return a; },
+	toBBox: function (a) { return a; },
 
 	// recursively search for objects in a given bbox
 	search: function (bbox) {
@@ -35,15 +35,18 @@ rbush.prototype = {
 		return this;
 	},
 
+	// bulk load data with the OMT algorithm
 	_buildFromTop: function (data) {
 
-		var N = data.length,               // number of items
-		    S = this._getNumTopSlices(N),  // number of slices for levels 0 and 1
-		    N1 = Math.ceil(N / S),         // size of each root node
-		    N2 = Math.ceil(N1 / S),        // size of each node of the second tree level
+		var N = data.length,           // number of items
+		    S = this._numTopSlices(N), // number of slices for levels 0 and 1
+		    N1 = Math.ceil(N / S),     // size of each root node
+		    N2 = Math.ceil(N1 / S),    // size of each node of the next level after root
+
 		    items = data.slice().sort(this.sortX),
 		    i, j, slice, node;
 
+		// create S x S nodes for the root and build the rest recursively
 		for (i = 0; i < N; i += N1) {
 			slice = items.slice(i, i + N1).sort(this.sortY);
 
@@ -58,9 +61,8 @@ rbush.prototype = {
 
 		var node = {},
 		    len = items.length,
-		    M = this._maxFill,      // max number of branches in a node
-		    k = Math.ceil(len / M), // size of each child node
-		    i, slice, childNode;
+		    k = Math.ceil(len / this._maxFill), // size of each child node
+		    i, childNode;
 
 		if (k < 2) {
 			node.children = items;
@@ -68,9 +70,8 @@ rbush.prototype = {
 			return node;
 		}
 
-		items.sort(level % 2 ?
-			this.sortX :
-			this.sortY);
+		// split by different plane each time - x, y, x, y, etc.
+		items.sort(level % 2 ? this.sortX : this.sortY);
 
 		node.children = [];
 
@@ -91,7 +92,7 @@ rbush.prototype = {
 			child = node.children[i];
 
 			if (node.leaf) {
-				this._extend(node.bbox, this.getBBox(child));
+				this._extend(node.bbox, this.toBBox(child));
 			} else {
 				this._calcBBoxes(child);
 				this._extend(node.bbox, child.bbox);
@@ -99,7 +100,7 @@ rbush.prototype = {
 		}
 	},
 
-	_getNumTopSlices: function (N) {
+	_numTopSlices: function (N) {
 
 		var M = this._maxFill,                             // max number of branches in one node
 		    h = Math.ceil(Math.log(N) / Math.log(M)),      // target height of the tree
@@ -121,7 +122,7 @@ rbush.prototype = {
 
 			if (!node.leaf) {
 				this._search(bbox, child, result);
-			} else if (this._contains(bbox, this.getBBox(child))) {
+			} else if (this._contains(bbox, this.toBBox(child))) {
 				result.push(child);
 			}
 		}
