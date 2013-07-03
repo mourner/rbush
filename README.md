@@ -14,7 +14,7 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 
 ## Basic Usage
 
-```
+```js
 var tree = rbush().load(data);
 var result = tree.search([40, 20, 80, 70]); // bbox in minX, minY, maxX, maxY format
 ```
@@ -23,7 +23,7 @@ var result = tree.search([40, 20, 80, 70]); // bbox in minX, minY, maxX, maxY fo
 
 By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize that by redefining three methods &mdash; `sortX`, `sortY` and `toBBox`:
 
-```
+```js
 var tree = rbush();
 
 tree.sortX = function (a, b) { return a.bounds.minLng > b.bounds.minLng ? 1 : -1; };
@@ -43,6 +43,7 @@ tree.load([{
 		maxLat: 60
 	}
 }, ...]);
+```
 
 ## Papers
 
