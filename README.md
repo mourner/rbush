@@ -1,7 +1,7 @@
 rbush
 =====
 
-A high-performance JavaScript 2D spatial index for rectangles, based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms. Developed by [Vladimir Agafonkin](http://github.com/mourner). _A work in progress_.
+A high-performance JavaScript 2D spatial index for points and rectangles, based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms. Developed by [Vladimir Agafonkin](http://github.com/mourner). _A work in progress_.
 
 ## Roadmap
 

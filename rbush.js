@@ -8,24 +8,31 @@ var rbush = function (maxFill) {
 
 rbush.prototype = {
 
+	// redefine the next 3 methods to suit your data format
+
+	// compare function for sorting by x coordinate
 	sortX: function (a, b) {
 		return a[0] > b[0] ? 1 : -1;
 	},
 
+	// compare function for sorting by y coordinate
 	sortY: function (a, b) {
 		return a[1] > b[1] ? 1 : -1;
 	},
 
+	// should data item bounding box in the form of [minX, minY, maxX, maxY]
 	getBBox: function (a) {
 		return a;
 	},
 
+	// recursively search for objects in a given bbox
 	search: function (bbox) {
 		var result = [];
 		this._search(bbox, this.data, result);
 		return result;
 	},
 
+	// bulk load all data and recursively build the tree from stratch
 	load: function (data) {
 
 		var N = data.length,               // number of items
@@ -85,6 +92,7 @@ rbush.prototype = {
 		return node;
 	},
 
+	// recursively calculate all node bboxes in the tree
 	_calcBBoxes: function (node) {
 		var i, len, child;
 
