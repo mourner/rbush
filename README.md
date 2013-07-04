@@ -8,6 +8,12 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 * ~~Bulk loading~~
 * ~~Tree search~~
 * Single insertion
+	* ~~Choose subtree~~
+	* Reinsert
+	* Split
+		* Choose split axis
+		* Choose split index
+	* Recalculate bboxes
 * Bulk insertion
 * Single removal
 * Bulk removal

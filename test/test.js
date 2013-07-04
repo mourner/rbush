@@ -82,4 +82,8 @@ describe('rbush', function () {
                  '45,20', '45,70', '75,50', '50,25', '60,35', '70,45'].sort());
         });
     });
+
+    describe('addOne', function () {
+        it('adds an item to an existing tree');
+    });
 });
