@@ -137,15 +137,16 @@ rbush.prototype = {
     _build: function (items, level) {
 
         var node = {},
-            len = items.length,
-            k = Math.ceil(len / this._maxFill), // size of each child node
-            i, childNode;
+            len = items.length;
 
-        if (k < 2) {
+        if (len <= this._maxFill) {
             node.children = items;
             node.leaf = true;
             return node;
         }
+
+        var k = Math.ceil(len / this._maxFill), // size of each child node
+            i, childNode;
 
         // split by different plane each time - x, y, x, y, etc.
         items.sort(level % 2 ? this.sortX : this.sortY);
