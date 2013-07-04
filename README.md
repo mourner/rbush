@@ -8,15 +8,15 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 * ~~Bulk loading~~
 * ~~Tree search~~
 * Single insertion
-* Single removal
 * Bulk insertion
+* Single removal
 * Bulk removal
 
 ## Basic Usage
 
 ```js
-var tree = rbush().load(data);
-var result = tree.search([40, 20, 80, 70]); // bbox in minX, minY, maxX, maxY format
+var tree = rbush().load([[10, 10, 15, 20], [12, 15, 40, 64.5], ... ]);
+var result = tree.search([40, 20, 80, 70]); // minX, minY, maxX, maxY
 ```
 
 ### Data Format
