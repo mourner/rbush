@@ -5,7 +5,7 @@ var rbush = function (maxFill) {
         // jshint newcap: false
         return new rbush(maxFill);
     }
-    this._maxFill = maxFill || 6;
+    this._maxFill = maxFill;
 };
 
 rbush.prototype = {
@@ -30,6 +30,10 @@ rbush.prototype = {
     load: function (data) {
         this.data = {};
         this.data.children = [];
+
+        if (!this._maxFill) {
+            this._maxFill = Math.max(Math.ceil(data.length / 1000), 6);
+        }
 
         this._buildFromTop(data);
         this._calcBBoxes(this.data);
