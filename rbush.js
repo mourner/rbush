@@ -1,11 +1,12 @@
 (function () { 'use strict';
 
-var rbush = function (maxFill) {
+var rbush = function (maxFill, minFill) {
     if (!(this instanceof rbush)) {
         // jshint newcap: false
         return new rbush(maxFill);
     }
     this._maxFill = maxFill;
+    this._minFill = minFill;
 };
 
 rbush.prototype = {
@@ -33,6 +34,9 @@ rbush.prototype = {
 
         if (!this._maxFill) {
             this._maxFill = Math.max(Math.ceil(data.length / 1000), 6);
+        }
+        if (!this._minFill) {
+            this._minFill = Math.max(2, Math.floor(this._maxFill * 0.4));
         }
 
         this._buildFromTop(data);
@@ -145,7 +149,7 @@ rbush.prototype = {
             return node;
         }
 
-        var k = Math.ceil(len / this._maxFill), // size of each child node
+        var k = Math.max(this._minFill, Math.ceil(len / this._maxFill)), // size of each child node
             i, childNode;
 
         // split by different plane each time - x, y, x, y, etc.
