@@ -4,39 +4,66 @@ var data = [],
     x, y;
 
 var N = 1000000,
-    bbox = [49,72,51,74],
-    bbox2 = [23.5, 43.5, 23.6, 43.6];
+    maxFill = null;
+
+function randBox(size) {
+    var x = Math.random() * (100 - size),
+        y = Math.random() * (100 - size);
+    return [x, y,
+        x + size * Math.random(),
+        y + size * Math.random()];
+}
 
 for (var i = 0; i < N; i++) {
-    x = Math.random() * 99;
-    y = Math.random() * 99;
-    data[i] = [x, y, x + 1, y + 1];
+    data[i] = randBox(1);
 }
 
 console.log('number: ' + N);
 
-console.time('load');
-var tree = rbush().load(data);
-console.timeEnd('load');
 
-console.time('search 2x2 of 100x100');
-var result = tree.search(bbox);
-console.timeEnd('search 2x2 of 100x100');
+console.time('bulk load');
+var tree = rbush(maxFill).load(data);
+console.timeEnd('bulk load');
 
-console.time('search 0.1x0.1 of 100x100');
-var result = tree.search(bbox2);
-console.timeEnd('search 0.1x0.1 of 100x100');
+console.log('maxFill: ' + tree._maxFill);
 
-
-console.time('naive search');
-var result = [];
-for (var i = 0; i < N; i++) {
- if (tree._contains(bbox, data[i])) {
-     result.push(data[i]);
- }
+console.time('100 searches 1%');
+for (i = 0; i < 100; i++) {
+    tree.search(randBox(10));
 }
-console.timeEnd('naive search');
+console.timeEnd('100 searches 1%');
 
+console.time('100 searches 0.01%');
+for (i = 0; i < 100; i++) {
+    tree.search(randBox(1));
+}
+console.timeEnd('100 searches 0.01%');
+
+console.time('100 choose subtree 1%');
+for (i = 0; i < 100; i++) {
+    tree._chooseSubtree(randBox(10), tree.data);
+}
+console.timeEnd('100 choose subtree 1%');
+
+console.time('100 choose subtree 0.01%');
+for (i = 0; i < 100; i++) {
+    tree._chooseSubtree(randBox(1), tree.data);
+}
+console.timeEnd('100 choose subtree 0.01%');
+
+var result, bbox;
+
+console.time('100 naive searches 1%');
+for (var j = 0; j < 100; j++) {
+    result = [];
+    bbox = randBox(10);
+    for (i = 0; i < N; i++) {
+        if (tree._contains(bbox, data[i])) {
+            result.push(data[i]);
+        }
+    }
+}
+console.timeEnd('100 naive searches 1%');
 
 // var RTree = typeof require !== 'undefined' ? require('rtree') : RTree;
 
