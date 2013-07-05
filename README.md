@@ -18,14 +18,51 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 * Single removal
 * Bulk removal
 
-## Basic Usage
+## Usage
+
+### Creating a Tree
 
 ```js
-var tree = rbush().load([[10, 10, 15, 20], [12, 15, 40, 64.5], ... ]);
-var result = tree.search([40, 20, 80, 70]); // minX, minY, maxX, maxY
+var tree = rbush();
 ```
 
-### Data Format
+### Bulk Load
+
+Builds a tree with the given data (in `[minX, minY, maxX, maxY]` format) from scratch:
+
+```js
+var tree = rbush().load([
+	[10, 10, 15, 20],
+	[12, 15, 40, 64.5],
+	...
+]);
+```
+
+Bulk loading is much faster than adding data points one by one.
+
+### Adding and Removing Data
+
+Not supported yet.
+
+### Search
+
+```js
+var result = tree.search([40, 20, 80, 70]);
+```
+
+Returns an array of data items (points or rectangles) that the given bounding box (in `[minX, minY, maxX, maxY]` form) contains.
+
+### Customizing
+
+#### Max Fill
+
+`rbush` accepts an optional `maxFill` argument which is a maximum number of entries in a tree node. Adjusting it can drastically affect performance depending on the type of data and search queries you perform.
+
+```js
+var tree = rbush(20);
+```
+
+#### Data Format
 
 By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize this by redefining `sortX`, `sortY` and `toBBox` methods like this:
 
