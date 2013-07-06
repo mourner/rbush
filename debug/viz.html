@@ -18,12 +18,12 @@
     }
 
     for (var i = 0; i < N; i++) {
-        data[i] = randBox(10);
+        data[i] = randBox(1);
     }
 
-    var tree = rbush(10).load(data);
+    var tree = rbush(14).load(data);
 
-    var colors = ['#ff0000', '#f77', '#fdd'];
+    var colors = ['#ff0000', 'green', '#fcc'];
 
     var rects = [];
 
@@ -43,7 +43,7 @@
         rects.push(rect);
 
         if (node.leaf) return;
-        if (level === 3) { return; }
+        //if (level === 3) { return; }
 
         for (var i = 0; i < node.children.length; i++) {
             drawTree(node.children[i], level + 1);
