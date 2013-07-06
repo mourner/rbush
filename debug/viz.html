@@ -5,7 +5,7 @@
     var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
 
-    var N = 10000,
+    var N = 50000,
         W = 700,
         data = [];
 
@@ -21,9 +21,9 @@
         data[i] = randBox(1);
     }
 
-    var tree = rbush(14).load(data);
+    var tree = rbush(10).load(data);
 
-    var colors = ['#ff0000', 'green', '#fcc'];
+    var colors = ['red', 'blue', 'green'];
 
     var rects = [];
 
@@ -32,6 +32,7 @@
 
         if (level) {
             rect.push(colors[(level - 1) % colors.length]);
+            rect.push(1 / level);
             rect.push([
                 Math.round(node.bbox[0]) + 0.5,
                 Math.round(node.bbox[1]) + 0.5,
@@ -43,7 +44,7 @@
         rects.push(rect);
 
         if (node.leaf) return;
-        //if (level === 3) { return; }
+        //if (level === 8) { return; }
 
         for (var i = 0; i < node.children.length; i++) {
             drawTree(node.children[i], level + 1);
@@ -54,6 +55,7 @@
 
     for (var i = rects.length - 1; i >= 0; i--) {
         ctx.strokeStyle = rects[i][0];
-        ctx.strokeRect.apply(ctx, rects[i][1]);
+        ctx.globalAlpha = rects[i][1];
+        ctx.strokeRect.apply(ctx, rects[i][2]);
     }
 </script>
