@@ -80,6 +80,16 @@ console.timeEnd('100 naive searches 1%');
 // }
 // console.timeEnd('load 2');
 
-// console.time('search 2');
-// var result = tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
-// console.timeEnd('search 2');
+// console.time('100 searches 1% 2');
+// for (i = 0; i < 100; i++) {
+//     bbox = randBox(10);
+//     tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
+// }
+// console.timeEnd('100 searches 1% 2');
+
+// console.time('100 searches 0.01% 2');
+// for (i = 0; i < 100; i++) {
+//     bbox = randBox(1);
+//     tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
+// }
+// console.timeEnd('100 searches 0.01% 2');
