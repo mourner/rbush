@@ -58,7 +58,7 @@ for (var j = 0; j < 100; j++) {
     result = [];
     bbox = randBox(10);
     for (i = 0; i < N; i++) {
-        if (tree._contains(bbox, data[i])) {
+        if (tree._intersects(bbox, data[i])) {
             result.push(data[i]);
         }
     }

@@ -47,70 +47,22 @@ rbush.prototype = {
         // TODO reinsert, split (choose split axis, choose split index), insert
     },
 
-    _chooseSubtree: function (bbox, node) {
+    _search: function (bbox, node, result) {
 
-        if (node.leaf) { return node; }
+        if (!this._intersects(bbox, node.bbox)) { return; }
 
-        var i, len, child, targetNode,
-            area, enlargement, overlap, minArea, minEnlargement, minOverlap;
+        var i, child,
+            len = node.children.length;
 
-        minArea = minEnlargement = minOverlap = Infinity;
-
-        for (var i = 0, len = node.children.length; i < len; i++) {
+        for (i = 0; i < len; i++) {
             child = node.children[i];
 
-            area = this._area(child.bbox);
-            enlargement = this._enlargedArea(bbox, child.bbox) - area;
-            // overlap = child.leaf && this._overlapArea(bbox, child);
-
-            // choose the node with the least overlap
-            if (overlap < minOverlap) {
-                minOverlap = overlap;
-                targetNode = child;
-
-            } else if (!overlap || overlap === minOverlap) {
-                // otherwise choose one with the least area enlargement
-                if (enlargement < minEnlargement) {
-                    minEnlargement = enlargement;
-                    targetNode = child;
-
-                } else if (enlargement === minEnlargement) {
-                    // otherwise choose one with the smallest area
-                    if (area < minArea) {
-                        minArea = area;
-                        targetNode = child;
-                    }
-                }
+            if (!node.leaf) {
+                this._search(bbox, child, result);
+            } else if (this._intersects(bbox, this.toBBox(child))) {
+                result.push(child);
             }
         }
-
-        return this._chooseSubtree(bbox, targetNode);
-    },
-
-    _area: function (bbox) {
-        return (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
-    },
-
-    _enlargedArea: function (bbox, bbox2) {
-        return (Math.max(bbox2[2], bbox[2]) - Math.min(bbox2[0], bbox[0])) *
-               (Math.max(bbox2[3], bbox[3]) - Math.min(bbox2[1], bbox[1]));
-    },
-
-    _overlapArea: function (bbox, node) {
-        for (var i = 0, sum = 0, len = node.children.length; i < len; i++) {
-            sum += this._intersectionArea(this.toBBox(node.children[i]), bbox);
-        }
-        return sum;
-    },
-
-    _intersectionArea: function (bbox, bbox2) {
-        var minX = Math.max(bbox[0], bbox2[0]),
-            maxX = Math.min(bbox[2], bbox2[2]),
-            minY = Math.max(bbox[1], bbox2[1]),
-            maxY = Math.min(bbox[3], bbox2[3]);
-
-        return Math.max(maxX - minX, 0) *
-               Math.max(maxY - minY, 0);
     },
 
     // bulk load data with the OMT algorithm
@@ -170,29 +122,44 @@ rbush.prototype = {
         }
     },
 
-    _numSlices: function (N) {
-        var M = this._maxFill,                         // max number of entries in one node
-            h = Math.ceil(Math.log(N) / Math.log(M)),  // height of the tree
-            Ns = Math.pow(M, h - 1);                   // max number of tree nodes
-        return Math.ceil(N / Ns);                      // target number of root entries
-    },
+    _chooseSubtree: function (bbox, node) {
 
-    _search: function (bbox, node, result) {
+        if (node.leaf) { return node; }
 
-        if (!this._intersects(bbox, node.bbox)) { return; }
+        var i, len, child, targetNode,
+            area, enlargement, overlap, minArea, minEnlargement, minOverlap;
 
-        var i, child,
-            len = node.children.length;
+        minArea = minEnlargement = minOverlap = Infinity;
 
-        for (i = 0; i < len; i++) {
+        for (var i = 0, len = node.children.length; i < len; i++) {
             child = node.children[i];
 
-            if (!node.leaf) {
-                this._search(bbox, child, result);
-            } else if (this._contains(bbox, this.toBBox(child))) {
-                result.push(child);
+            area = this._area(child.bbox);
+            enlargement = this._enlargedArea(bbox, child.bbox) - area;
+            // overlap = child.leaf && this._overlapArea(bbox, child);
+
+            // choose the node with the least overlap
+            if (overlap < minOverlap) {
+                minOverlap = overlap;
+                targetNode = child;
+
+            } else if (!overlap || overlap === minOverlap) {
+                // otherwise choose one with the least area enlargement
+                if (enlargement < minEnlargement) {
+                    minEnlargement = enlargement;
+                    targetNode = child;
+
+                } else if (enlargement === minEnlargement) {
+                    // otherwise choose one with the smallest area
+                    if (area < minArea) {
+                        minArea = area;
+                        targetNode = child;
+                    }
+                }
             }
         }
+
+        return this._chooseSubtree(bbox, targetNode);
     },
 
     _intersects: function (bbox, bbox2) {
@@ -202,18 +169,38 @@ rbush.prototype = {
                bbox2[3] >= bbox[1];
     },
 
-    _contains: function (bbox, bbox2) {
-        return bbox2[0] >= bbox[0] &&
-               bbox2[1] >= bbox[1] &&
-               bbox2[2] <= bbox[2] &&
-               bbox2[3] <= bbox[3];
-    },
-
     _extend: function (bbox, bbox2) {
         bbox[0] = Math.min(bbox[0], bbox2[0]);
         bbox[1] = Math.min(bbox[1], bbox2[1]);
         bbox[2] = Math.max(bbox[2], bbox2[2]);
         bbox[3] = Math.max(bbox[3], bbox2[3]);
+    },
+
+    _area: function (bbox) {
+        return (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+    },
+
+    _enlargedArea: function (bbox, bbox2) {
+        return (Math.max(bbox2[2], bbox[2]) - Math.min(bbox2[0], bbox[0])) *
+               (Math.max(bbox2[3], bbox[3]) - Math.min(bbox2[1], bbox[1]));
+    },
+
+    _overlapArea: function (bbox, node) {
+        for (var i = 0, sum = 0, len = node.children.length; i < len; i++) {
+            sum += this._intersectionArea(this.toBBox(node.children[i]), bbox);
+        }
+        return sum;
+    },
+
+    _intersectionArea: function (bbox, bbox2) {
+        if (!this._intersects(bbox, bbox2)) { return; }
+
+        var minX = Math.max(bbox[0], bbox2[0]),
+            maxX = Math.min(bbox[2], bbox2[2]),
+            minY = Math.max(bbox[1], bbox2[1]),
+            maxY = Math.min(bbox[3], bbox2[3]);
+
+        return (maxX - minX) * (maxY - minY);
     }
 };
 
