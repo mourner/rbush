@@ -3,7 +3,7 @@
 var rbush = function (maxFill, minFill) {
     if (!(this instanceof rbush)) {
         // jshint newcap: false
-        return new rbush(maxFill);
+        return new rbush(maxFill, minFill);
     }
     this._maxFill = maxFill;
     this._minFill = minFill;
@@ -29,9 +29,6 @@ rbush.prototype = {
 
     // bulk load all data and recursively build the tree from stratch
     load: function (data) {
-        this.data = {};
-        this.data.children = [];
-
         if (!this._maxFill) {
             this._maxFill = Math.max(Math.ceil(data.length / 1000), 6);
         }
@@ -39,7 +36,7 @@ rbush.prototype = {
             this._minFill = Math.max(2, Math.floor(this._maxFill * 0.4));
         }
 
-        this._buildFromTop(data);
+        this.data = this._build(data.slice(), 0);
         this._calcBBoxes(this.data);
 
         return this;
@@ -64,7 +61,7 @@ rbush.prototype = {
 
             area = this._area(child.bbox);
             enlargement = this._enlargedArea(bbox, child.bbox) - area;
-            overlap = child.leaf && this._overlapArea(bbox, child);
+            // overlap = child.leaf && this._overlapArea(bbox, child);
 
             // choose the node with the least overlap
             if (overlap < minOverlap) {
@@ -117,49 +114,40 @@ rbush.prototype = {
     },
 
     // bulk load data with the OMT algorithm
-    _buildFromTop: function (data) {
-
-        var N = data.length,           // number of items
-            S = this._numTopSlices(N), // number of slices for levels 0 and 1
-            N1 = Math.ceil(N / S),     // size of each root node
-            N2 = Math.ceil(N1 / S),    // size of each node of the next level after root
-
-            items = data.slice().sort(this.sortX),
-            i, j, slice, node;
-
-        // create S x S nodes for the root and build the rest recursively
-        for (i = 0; i < N; i += N1) {
-            slice = items.slice(i, i + N1).sort(this.sortY);
-
-            for (j = 0; j < N1; j += N2) {
-                node = this._build(slice.slice(j, j + N2), 1);
-                this.data.children.push(node);
-            }
-        }
-    },
-
     _build: function (items, level) {
 
         var node = {},
-            len = items.length;
+            N = items.length,
+            M = this._maxFill;
 
-        if (len <= this._maxFill) {
+        if (N <= M) {
             node.children = items;
             node.leaf = true;
             return node;
         }
 
-        var k = Math.max(this._minFill, Math.ceil(len / this._maxFill)), // size of each child node
-            i, childNode;
-
-        // split by different plane each time - x, y, x, y, etc.
-        items.sort(level % 2 ? this.sortX : this.sortY);
-
         node.children = [];
 
-        for (i = 0; i < len; i += k) {
-            childNode = this._build(items.slice(i, i + k), level + 1);
-            node.children.push(childNode);
+        if (!level) {
+            // target number of root entries
+            M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
+
+            items.sort(this.sortX);
+        }
+
+        var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
+            N2 = Math.ceil(N / M),
+            sortFn = level % 2 === 1 ? this.sortX : this.sortY,
+            i, j, slice, sliceLen, childNode;
+
+        // create S x S entries for the node and build from there recursively
+        for (i = 0; i < N; i += N1) {
+            slice = items.slice(i, i + N1).sort(sortFn);
+
+            for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
+                childNode = this._build(slice.slice(j, j + N2), level + 1);
+                node.children.push(childNode);
+            }
         }
 
         return node;
@@ -182,14 +170,11 @@ rbush.prototype = {
         }
     },
 
-    _numTopSlices: function (N) {
-
-        var M = this._maxFill,                             // max number of branches in one node
-            h = Math.ceil(Math.log(N) / Math.log(M)),      // target height of the tree
-            Ns = Math.pow(M, h - 1),                       // max number of tree nodes
-            S = Math.floor(Math.sqrt(Math.ceil(N / Ns)));  // target number of level 0-1 branches
-
-        return Math.max(S, 2);
+    _numSlices: function (N) {
+        var M = this._maxFill,                         // max number of entries in one node
+            h = Math.ceil(Math.log(N) / Math.log(M)),  // height of the tree
+            Ns = Math.pow(M, h - 1);                   // max number of tree nodes
+        return Math.ceil(N / Ns);                      // target number of root entries
     },
 
     _search: function (bbox, node, result) {
