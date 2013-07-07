@@ -1,6 +1,6 @@
 (function () { 'use strict';
 
-var rbush = function (maxFill, minFill) {
+function rbush(maxFill, minFill) {
     if (!(this instanceof rbush)) {
         // jshint newcap: false
         return new rbush(maxFill, minFill);
@@ -45,6 +45,15 @@ rbush.prototype = {
     addOne: function (item) {
         var node = this._chooseSubtree(this.toBBox(item), this.data);
         // TODO reinsert, split (choose split axis, choose split index), insert
+    },
+
+    toJSON: function () {
+        return this.data;
+    },
+
+    fromJSON: function (data) {
+        this.data = data;
+        return this;
     },
 
     _search: function (bbox, node, result) {
