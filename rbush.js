@@ -195,21 +195,20 @@ rbush.prototype = {
     },
 
     _overlapArea: function (bbox, node) {
-        for (var i = 0, sum = 0, len = node.children.length; i < len; i++) {
-            sum += this._intersectionArea(this.toBBox(node.children[i]), bbox);
+        for (var i = 0, sum = 0, len = node.children.length, bbox2; i < len; i++) {
+            bbox2 = this.toBBox(node.children[i]);
+            sum += this._intersects(bbox, bbox2) ? this._intersectionArea(bbox, bbox2) : 0;
         }
         return sum;
     },
 
     _intersectionArea: function (bbox, bbox2) {
-        if (!this._intersects(bbox, bbox2)) { return; }
-
         var minX = Math.max(bbox[0], bbox2[0]),
             maxX = Math.min(bbox[2], bbox2[2]),
             minY = Math.max(bbox[1], bbox2[1]),
             maxY = Math.min(bbox[3], bbox2[3]);
 
-        return (maxX - minX) * (maxY - minY);
+        return Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
     }
 };
 
