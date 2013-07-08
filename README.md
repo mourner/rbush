@@ -30,10 +30,10 @@ A spatial index is a special data structure for points and rectangles that allow
 var tree = rbush(4);
 ```
 
-`rbush` requires a `maxEntries` argument which defines the maximum number of entries in a tree node.
-It drastically affects the performance so you should adjust it considering the type of data and search queries you perform.
+The first argument to `rbush` defines the maximum number of entries in a tree node.
+It drastically affects the performance, so you should adjust it considering the type of data and search queries you perform.
 
-### Bulk Load
+### Loading Data
 
 ```js
 tree.load([
@@ -44,7 +44,7 @@ tree.load([
 ```
 
 Builds a tree with the given rectangle data from scratch.
-Bulk loading like this is many times faster than adding data items one by one.
+Bulk loading like this is many times faster than inserting data items one by one.
 
 #### Data Format
 
@@ -74,6 +74,19 @@ var result = tree.search([40, 20, 80, 70]);
 ```
 
 Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
+
+## Export and Import
+
+```
+// export data as JSON object
+tree.toJSON();
+
+// import previously exported data
+var tree = rbush(4).fromJSON(treeData);
+```
+
+Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
+e.g. first indexing the data on the server and and then importing the resulting tree data on the client for searching.
 
 ## Papers
 
