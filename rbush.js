@@ -6,21 +6,17 @@
 
 (function () { 'use strict';
 
-function rbush(maxFill, minFill) {
+function rbush(maxEntries) {
     if (!(this instanceof rbush)) {
         // jshint newcap: false
-        return new rbush(maxFill, minFill);
+        return new rbush(maxEntries);
     }
 
-    if (!maxFill) {
-        throw new Error("Provide a maxFill argument to rbush constructor");
+    if (!maxEntries) {
+        throw new Error("Provide a maxEntries argument to rbush constructor");
     }
-    this._maxFill = Math.max(4, maxFill);
-
-    if (!this._minFill) {
-        this._minFill = Math.max(2, Math.floor(this._maxFill * 0.4));
-    }
-    this._minFill = minFill;
+    this._maxEntries = Math.max(4, maxEntries);
+    this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
 };
 
 rbush.prototype = {
@@ -86,7 +82,7 @@ rbush.prototype = {
 
         var node = {},
             N = items.length,
-            M = this._maxFill;
+            M = this._maxEntries;
 
         if (N <= M) {
             node.children = items;
