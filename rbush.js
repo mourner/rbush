@@ -138,27 +138,49 @@ rbush.prototype = {
 
         if (node.leaf) { return node; }
 
-        var i, len, child, targetNode,
-            area, enlargement, overlap, minArea, minEnlargement, minOverlap;
+        var i, child, targetNode, area, enlargement, overlap, checkOverlap,
+            minArea, minEnlargement, minOverlap,
+            len = node.children.length;
 
         minArea = minEnlargement = minOverlap = Infinity;
 
-        for (var i = 0, len = node.children.length; i < len; i++) {
+        for (i = 0; i < len; i++) {
             child = node.children[i];
 
-            area = this._area(child.bbox);
-            enlargement = this._enlargedArea(bbox, child.bbox) - area;
-            // overlap = child.leaf && this._overlapArea(bbox, child);
+            child.area = this._area(child.bbox);
+            child.enlargement = this._enlargedArea(bbox, child.bbox) - child.area;
+            // TODO cleanup in toJSON
+        }
 
-            // choose the node with the least overlap
-            if (overlap < minOverlap) {
+        if (node.children[0].leaf) {
+            // if node children are leaves, narrow our search to 32 rectangles with least area enlargement
+            node.children.sort(this._sortEnlargement);
+            len = Math.min(32, len);
+            checkOverlap = true;
+        }
+
+        for (i = 0; i < len; i++) {
+            child = node.children[i];
+
+            if (checkOverlap) {
+                overlap = this._overlapArea(bbox, child, node.children, len);
+            }
+            area = child.area;
+            enlargement = child.enlargement;
+
+            // choose entry with the least overlap enlargement
+            if (checkOverlap && overlap < minOverlap) {
                 minOverlap = overlap;
+                minEnlargement = enlargement < minEnlargement ? enlargement : minEnlargement;
+                minArea = area < minArea ? area : minArea;
                 targetNode = child;
 
-            } else if (!overlap || overlap === minOverlap) {
-                // otherwise choose one with the least area enlargement
+            } else if (!checkOverlap || overlap === minOverlap) {
+
+                // otherwise choose entry with the least area enlargement
                 if (enlargement < minEnlargement) {
                     minEnlargement = enlargement;
+                    minArea = area < minArea ? area : minArea;
                     targetNode = child;
 
                 } else if (enlargement === minEnlargement) {
@@ -171,7 +193,11 @@ rbush.prototype = {
             }
         }
 
-        return this._chooseSubtree(bbox, targetNode);
+        return this._chooseSubtree(bbox, targetNode || child);
+    },
+
+    _sortEnlargement: function (a, b) {
+        return a.enlargement > b.enlargement ? 1 : -1;
     },
 
     _intersects: function (bbox, bbox2) {
@@ -186,6 +212,7 @@ rbush.prototype = {
         bbox[1] = Math.min(bbox[1], bbox2[1]);
         bbox[2] = Math.max(bbox[2], bbox2[2]);
         bbox[3] = Math.max(bbox[3], bbox2[3]);
+        return bbox;
     },
 
     _area: function (bbox) {
@@ -197,11 +224,18 @@ rbush.prototype = {
                (Math.max(bbox2[3], bbox[3]) - Math.min(bbox2[1], bbox[1]));
     },
 
-    _overlapArea: function (bbox, node) {
-        for (var i = 0, sum = 0, len = node.children.length, bbox2; i < len; i++) {
-            bbox2 = this.toBBox(node.children[i]);
-            sum += this._intersects(bbox, bbox2) ? this._intersectionArea(bbox, bbox2) : 0;
+    _overlapArea: function (bbox, node, nodes, len) {
+        var newBox = this._extend(node.bbox.slice(), bbox);
+
+        for (var i = 0, sum = 0, bbox2; i < len; i++) {
+            if (node !== nodes[i]) {
+                bbox2 = nodes[i].bbox;
+                if (this._intersects(newBox, bbox2)) {
+                    sum += this._intersectionArea(newBox, bbox2);
+                }
+            }
         }
+
         return sum;
     },
 
