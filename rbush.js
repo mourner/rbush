@@ -1,3 +1,9 @@
+/*
+ (c) 2013, Vladimir Agafonkin
+ RBush, a JavaScript library for high-performance 2D spatial indexing of points and rectangles.
+ https://github.com/mourner/rbush
+*/
+
 (function () { 'use strict';
 
 function rbush(maxFill, minFill) {

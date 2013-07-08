@@ -1,22 +1,23 @@
-rbush
+RBush
 =====
 
-A high-performance JavaScript library for 2D spatial indexing of points and rectangles, based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms. Developed by [Vladimir Agafonkin](http://github.com/mourner). _A work in progress_.
+A high-performance JavaScript library for 2D spatial indexing of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner), based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms. _A work in progress_.
 
 ## Roadmap
 
-* ~~Bulk loading~~
-* ~~Tree search~~
-* Single insertion
-	* ~~Choose subtree~~
-	* Reinsert
-	* Split
-		* Choose split axis
-		* Choose split index
-	* Recalculate bboxes
-* Bulk insertion
-* Single removal
-* Bulk removal
+* ~~tree search~~
+* ~~bulk loading (OMT)~~
+* single insertion (R<sup>*</sup>-tree)
+	* ~~choose subtree~~
+		* optimize min-overlap calculation
+	* reinsert
+	* split
+		* choose split axis
+		* choose split index
+	* recalculate bboxes
+* bulk insertion (seeded clustering)
+* single removal
+* bulk removal
 
 ## Usage
 
