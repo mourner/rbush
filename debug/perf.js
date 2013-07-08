@@ -25,7 +25,7 @@ console.time('bulk load');
 var tree = rbush(maxFill).load(data);
 console.timeEnd('bulk load');
 
-console.log('maxFill: ' + tree._maxFill);
+console.log('maxFill: ' + tree._maxEntries);
 
 console.time('100 searches 1%');
 for (i = 0; i < 100; i++) {
