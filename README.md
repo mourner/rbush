@@ -62,7 +62,7 @@ Returns an array of data items (points or rectangles) that the given bounding bo
 
 #### Data Format
 
-By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. However you can customize by providing a `format` argument (an array with `minX`, `minY`, `maxX`, `maxY` accessors as strings) to `rbush` like this:
+By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. You can customize it by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings as a second argument to `rbush` like this:
 
 ```js
 var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
