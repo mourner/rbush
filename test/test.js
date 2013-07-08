@@ -33,6 +33,14 @@ describe('rbush', function () {
         ], "bbox":[70,0,95,95]
     }], "bbox":[0,0,95,95]};
 
+    describe('constructor', function () {
+        it('accepts a format argument to customize the data format', function () {
+
+            var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
+            assert.deepEqual(tree._toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+        });
+    });
+
     describe('load', function () {
         it('bulk-loads the given data given max node entries and forms a proper search tree', function () {
 

@@ -6,10 +6,11 @@
 
 (function () { 'use strict';
 
-function rbush(maxEntries) {
+function rbush(maxEntries, format) {
+    // jshint newcap: false, validthis: true, evil: true
+
     if (!(this instanceof rbush)) {
-        // jshint newcap: false
-        return new rbush(maxEntries);
+        return new rbush(maxEntries, format);
     }
 
     if (!maxEntries) {
@@ -17,18 +18,18 @@ function rbush(maxEntries) {
     }
     this._maxEntries = Math.max(4, maxEntries);
     this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
-};
+
+
+    // customizes data format (minX, minY, maxX, maxY accessors)
+
+    format = format || ['[0]', '[1]', '[2]', '[3]'];
+
+    this._sortMinX = new Function('a', 'b', 'return a' + format[0] + ' > b' + format[0] + ' ? 1 : -1;');
+    this._sortMinY = new Function('a', 'b', 'return a' + format[1] + ' > b' + format[1] + ' ? 1 : -1;');
+    this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+}
 
 rbush.prototype = {
-
-    // redefine the next 3 methods to suit your data format
-
-    // compare functions for sorting by x and y coordinate
-    sortX: function (a, b) { return a[0] > b[0] ? 1 : -1; },
-    sortY: function (a, b) { return a[1] > b[1] ? 1 : -1; },
-
-    // get bounding box in the form of [minX, minY, maxX, maxY] given a data item
-    toBBox: function (a) { return a; },
 
     // recursively search for objects in a given bbox
     search: function (bbox) {
@@ -46,7 +47,7 @@ rbush.prototype = {
     },
 
     addOne: function (item) {
-        var node = this._chooseSubtree(this.toBBox(item), this.data);
+        var node = this._chooseSubtree(this._toBBox(item), this.data);
         // TODO reinsert, split (choose split axis, choose split index), insert
     },
 
@@ -71,7 +72,7 @@ rbush.prototype = {
 
             if (!node.leaf) {
                 this._search(bbox, child, result);
-            } else if (this._intersects(bbox, this.toBBox(child))) {
+            } else if (this._intersects(bbox, this._toBBox(child))) {
                 result.push(child);
             }
         }
@@ -96,12 +97,12 @@ rbush.prototype = {
             // target number of root entries
             M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
 
-            items.sort(this.sortX);
+            items.sort(this._sortMinX);
         }
 
         var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
             N2 = Math.ceil(N / M),
-            sortFn = level % 2 === 1 ? this.sortX : this.sortY,
+            sortFn = level % 2 === 1 ? this._sortMinX : this._sortMinY,
             i, j, slice, sliceLen, childNode;
 
         // create S x S entries for the node and build from there recursively
@@ -126,7 +127,7 @@ rbush.prototype = {
             child = node.children[i];
 
             if (node.leaf) {
-                this._extend(node.bbox, this.toBBox(child));
+                this._extend(node.bbox, this._toBBox(child));
             } else {
                 this._calcBBoxes(child);
                 this._extend(node.bbox, child.bbox);
