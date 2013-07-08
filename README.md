@@ -43,8 +43,25 @@ tree.load([
 ]);
 ```
 
-Builds a tree with the given data (in `[minX, minY, maxX, maxY]` format) from scratch.
+Builds a tree with the given rectangle data from scratch.
 Bulk loading like this is many times faster than adding data items one by one.
+
+#### Data Format
+
+By default, RBush assumes the format of data points to be `[minX, minY, maxX, maxY]`.
+You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings as a second argument to `rbush` like this:
+
+```js
+var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
+
+tree.load([{
+	id: 'foo',
+	minLng: 30,
+	minLat: 50,
+	maxLng: 40,
+	maxLat: 60
+}, ...]);
+```
 
 ### Adding and Removing Data
 
@@ -57,18 +74,6 @@ var result = tree.search([40, 20, 80, 70]);
 ```
 
 Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
-
-### Customizing
-
-#### Data Format
-
-By default, rbush assumes the format of data points as `[minX, minY, maxX, maxY]`. You can customize it by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings as a second argument to `rbush` like this:
-
-```js
-var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
-
-tree.load([{id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60}, ...]);
-```
 
 ## Papers
 
