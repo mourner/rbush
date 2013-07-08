@@ -1,61 +1,66 @@
 <!doctype html>
-<canvas id="canvas" width="710" height="710" />
+
+<title>RBush Tree Visualization</title>
+<canvas id="canvas" width="701" height="701"></canvas>
+
 <script src="../rbush.js"></script>
 <script>
-    var canvas = document.getElementById('canvas');
-    var ctx = canvas.getContext('2d');
 
-    var N = 50000,
-        W = 700,
-        data = [];
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
 
-    function randBox(size) {
-        var x = Math.random() * (700 - size),
-            y = Math.random() * (700 - size);
-        return [x, y,
-            x + size * Math.random(),
-            y + size * Math.random()];
+var N = 50000,
+    W = 700,
+    data = [];
+
+function randBox(size) {
+    var x = Math.random() * (700 - size),
+        y = Math.random() * (700 - size);
+    return [x, y,
+        x + size * Math.random(),
+        y + size * Math.random()];
+}
+
+for (var i = 0; i < N; i++) {
+    data[i] = randBox(1);
+}
+
+var tree = rbush(10).load(data);
+
+var colors = ['red', 'blue', 'green'];
+
+var rects = [];
+
+function drawTree(node, level) {
+    var rect = [];
+
+    if (level) {
+        rect.push(colors[(level - 1) % colors.length]);
+        rect.push(1 / level);
+        rect.push([
+            Math.round(node.bbox[0]) + 0.5,
+            Math.round(node.bbox[1]) + 0.5,
+            Math.round(node.bbox[2] - node.bbox[0]),
+            Math.round(node.bbox[3] - node.bbox[1])
+        ]);
     }
 
-    for (var i = 0; i < N; i++) {
-        data[i] = randBox(1);
+    rects.push(rect);
+
+    if (node.leaf) return;
+    //if (level === 8) { return; }
+
+    for (var i = 0; i < node.children.length; i++) {
+        drawTree(node.children[i], level + 1);
     }
+}
 
-    var tree = rbush(10).load(data);
+drawTree(tree.data, 0);
 
-    var colors = ['red', 'blue', 'green'];
+for (var i = rects.length - 1; i >= 0; i--) {
+    ctx.strokeStyle = rects[i][0];
+    ctx.globalAlpha = rects[i][1];
+    ctx.strokeRect.apply(ctx, rects[i][2]);
+}
 
-    var rects = [];
-
-    function drawTree(node, level) {
-        var rect = [];
-
-        if (level) {
-            rect.push(colors[(level - 1) % colors.length]);
-            rect.push(1 / level);
-            rect.push([
-                Math.round(node.bbox[0]) + 0.5,
-                Math.round(node.bbox[1]) + 0.5,
-                Math.round(node.bbox[2] - node.bbox[0]),
-                Math.round(node.bbox[3] - node.bbox[1])
-            ]);
-        }
-
-        rects.push(rect);
-
-        if (node.leaf) return;
-        //if (level === 8) { return; }
-
-        for (var i = 0; i < node.children.length; i++) {
-            drawTree(node.children[i], level + 1);
-        }
-    }
-
-    drawTree(tree.data, 0);
-
-    for (var i = rects.length - 1; i >= 0; i--) {
-        ctx.strokeStyle = rects[i][0];
-        ctx.globalAlpha = rects[i][1];
-        ctx.strokeRect.apply(ctx, rects[i][2]);
-    }
 </script>
