@@ -34,28 +34,35 @@ describe('rbush', function () {
     }], "bbox":[0,0,95,95]};
 
     describe('load', function () {
-        it('bulk-loads the given data and forms a balanced search tree', function () {
-            var tree = rbush(4).load(data);
+        it('bulk-loads the given data given max node entries and forms a proper search tree', function () {
 
-            assert.deepEqual(tree.data, testTree);
+            var tree = rbush(4).load(data);
+            assert.deepEqual(tree.toJSON(), testTree);
         });
     });
 
     describe('search', function () {
-        it('finds points given a bbox', function () {
-            var tree = rbush().load(data);
+        it('finds matching points in the tree given a bbox', function () {
 
+            var tree = rbush(4).load(data);
             var result = tree.search([40, 20, 80, 70]);
 
-            var sorted = [];
-            for (var i = 0; i < result.length; i++) {
-                sorted[i] = result[i][0] + ',' + result[i][1];
-            }
-            sorted.sort();
+            assert.deepEqual(result.sort(), [
+                [70,20,70,20],[75,25,75,25],[45,45,45,45],[50,50,50,50],[60,60,60,60],[70,70,70,70],
+                [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
+            ].sort());
+        });
+    });
 
-            assert.deepEqual(sorted,
-                ['70,20', '75,25', '45,45', '50,50', '60,60', '70,70',
-                 '45,20', '45,70', '75,50', '50,25', '60,35', '70,45'].sort());
+    describe('toJSON & fromJSON', function () {
+        it('exports and imports search tree in JSON format', function () {
+
+            var tree = rbush(4);
+            tree.fromJSON(testTree);
+
+            var tree2 = rbush(4).load(data);
+
+            assert.deepEqual(tree.toJSON(), tree2.toJSON());
         });
     });
 
