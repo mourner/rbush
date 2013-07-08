@@ -11,7 +11,15 @@ function rbush(maxFill, minFill) {
         // jshint newcap: false
         return new rbush(maxFill, minFill);
     }
-    this._maxFill = maxFill;
+
+    if (!maxFill) {
+        throw new Error("Provide a maxFill argument to rbush constructor");
+    }
+    this._maxFill = Math.max(4, maxFill);
+
+    if (!this._minFill) {
+        this._minFill = Math.max(2, Math.floor(this._maxFill * 0.4));
+    }
     this._minFill = minFill;
 };
 
@@ -35,13 +43,6 @@ rbush.prototype = {
 
     // bulk load all data and recursively build the tree from stratch
     load: function (data) {
-        if (!this._maxFill) {
-            this._maxFill = Math.max(Math.ceil(data.length / 1000), 6);
-        }
-        if (!this._minFill) {
-            this._minFill = Math.max(2, Math.floor(this._maxFill * 0.4));
-        }
-
         this.data = this._build(data.slice(), 0);
         this._calcBBoxes(this.data);
 

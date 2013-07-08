@@ -1,7 +1,11 @@
 RBush
 =====
 
-A high-performance JavaScript library for 2D spatial indexing of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner), based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms. _A work in progress_.
+A high-performance JavaScript library for 2D spatial indexing of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner),
+based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms.
+_A work in progress_.
+
+A spatial index is a special data structure for points and rectangles that allows you to perform queries like "give me all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
 
 ## Roadmap
 
@@ -9,7 +13,6 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 * ~~bulk loading (OMT)~~
 * single insertion (R<sup>*</sup>-tree)
 	* ~~choose subtree~~
-		* optimize min-overlap calculation
 	* reinsert
 	* split
 		* choose split axis
@@ -24,22 +27,24 @@ A high-performance JavaScript library for 2D spatial indexing of points and rect
 ### Creating a Tree
 
 ```js
-var tree = rbush();
+var tree = rbush(4);
 ```
+
+`rbush` requires a `maxEntries` argument which defines the maximum number of entries in a tree node.
+It drastically affects the performance so you should adjust it considering the type of data and search queries you perform.
 
 ### Bulk Load
 
-Builds a tree with the given data (in `[minX, minY, maxX, maxY]` format) from scratch:
-
 ```js
-var tree = rbush().load([
+tree.load([
 	[10, 10, 15, 20],
 	[12, 15, 40, 64.5],
 	...
 ]);
 ```
 
-Bulk loading is much faster than adding data points one by one.
+Builds a tree with the given data (in `[minX, minY, maxX, maxY]` format) from scratch.
+Bulk loading like this is many times faster than adding data items one by one.
 
 ### Adding and Removing Data
 
@@ -51,17 +56,9 @@ Not supported yet.
 var result = tree.search([40, 20, 80, 70]);
 ```
 
-Returns an array of data items (points or rectangles) that the given bounding box (in `[minX, minY, maxX, maxY]` form) contains.
+Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
 
 ### Customizing
-
-#### Max Fill
-
-`rbush` accepts an optional `maxFill` argument which is a maximum number of entries in a tree node. Adjusting it can drastically affect performance depending on the type of data and search queries you perform.
-
-```js
-var tree = rbush(20);
-```
 
 #### Data Format
 

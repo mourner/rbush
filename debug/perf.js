@@ -4,7 +4,7 @@ var data = [],
     x, y;
 
 var N = 1000000,
-    maxFill = null;
+    maxFill = 500;
 
 function randBox(size) {
     var x = Math.random() * (100 - size),
