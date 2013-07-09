@@ -29,7 +29,7 @@ var tree = rbush(10).load(data);
 
 var colors = ['red', 'blue', 'green'];
 
-var rects = [];
+var rects;
 
 function drawTree(node, level) {
     var rect = [];
@@ -55,12 +55,30 @@ function drawTree(node, level) {
     }
 }
 
-drawTree(tree.data, 0);
+function draw() {
+    rects = [];
+    drawTree(tree.data, 0);
 
-for (var i = rects.length - 1; i >= 0; i--) {
-    ctx.strokeStyle = rects[i][0];
-    ctx.globalAlpha = rects[i][1];
-    ctx.strokeRect.apply(ctx, rects[i][2]);
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, W + 1, W + 1);
+
+    for (var i = rects.length - 1; i >= 0; i--) {
+        ctx.strokeStyle = rects[i][0];
+        ctx.globalAlpha = rects[i][1];
+        ctx.strokeRect.apply(ctx, rects[i][2]);
+    }
+}
+
+draw();
+
+function insertRandom() {
+    console.time('insert 10 items');
+    for (var i = 0; i < 10; i++) {
+        tree.insert(randBox(1));
+    }
+    console.timeEnd('insert 10 items');
+
+    draw();
 }
 
 </script>

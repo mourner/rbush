@@ -39,16 +39,19 @@ rbush.prototype = {
     },
 
     // bulk load all data and recursively build the tree from stratch
-    load: function (data) {
+    load: function (data, utilization) {
         this.data = this._build(data.slice(), 0);
-        this._calcBBoxes(this.data);
+        this._calcBBoxes(this.data, true);
 
         return this;
     },
 
-    addOne: function (item) {
-        var node = this._chooseSubtree(this._toBBox(item), this.data);
-        // TODO reinsert, split (choose split axis, choose split index), insert
+    insert: function (item) {
+        this._overflowLevels = {};
+        console.count('insert');
+        this._insert(item);
+
+        return this;
     },
 
     toJSON: function () {
@@ -58,6 +61,74 @@ rbush.prototype = {
     fromJSON: function (data) {
         this.data = data;
         return this;
+    },
+
+    _insert: function (item) {
+        var bbox = this._toBBox(item),
+            insertPath = [],
+            node = this._chooseSubtree(bbox, this.data, insertPath);
+
+        // put the item into the node
+        node.children.push(item);
+        this._extend(node.bbox, bbox);
+        console.log('put into ' + node.bbox.toString() + ', now ' + node.children.length);
+
+        // deal with node overflow if it happened
+        if (node.children.length > this._maxEntries) {
+            this._treatOverflow(node, insertPath.length - 1);
+        }
+
+        // adjust bboxes along the insertion path
+        this._adjustBBoxes(node, insertPath);
+    },
+
+    _treatOverflow: function (node, level) {
+        var firstOverflow = !this._overflowLevels[level];
+        this._overflowLevels[level] = true;
+
+        if (level > 0 && firstOverflow) {
+            this._reinsert(node, level);
+        } else {
+            this._split(node, level);
+        }
+    },
+
+    _reinsert: function (node, level) {
+        var x = (node.bbox[0] + node.bbox[1]) / 2,
+            y = (node.bbox[2] + node.bbox[3]) / 2,
+            len = node.children.length,
+            reinsertLen = Math.round(len * 0.3),
+            child, i, len, dx, dy, bbox;
+
+        // calculate distances from node bbox center to children bbox centers
+        for (i = 0; i < len; i++) {
+            child = node.children[i];
+            bbox = node.leaf ? this._toBBox(child) : child.bbox;
+            dx = (bbox[0] + bbox[1]) / 2 - x;
+            dy = (bbox[2] + bbox[3]) / 2 - y;
+            child.sqDist = dx * dx + dy * dy;
+        }
+
+        // reinsert 30% items that are most far away from the old node bbox center
+        node.children.sort(this._sortDist);
+
+        var reinserted = node.children.splice(0, reinsertLen);
+
+        this._calcBBoxes(node);
+        // TODO adjust along path?
+
+        for (i = 0; i < reinsertLen; i++) {
+            console.count('reinsert');
+            this._insert(reinserted[i]);
+        }
+    },
+
+    _split: function () {
+        console.count('split');
+    },
+
+    _sortDist: function (a, b) {
+        return a.sqDist > b.sqDist ? 1 : -1;
     },
 
     _search: function (bbox, node, result) {
@@ -118,8 +189,7 @@ rbush.prototype = {
         return node;
     },
 
-    // recursively calculate all node bboxes in the tree
-    _calcBBoxes: function (node) {
+    _calcBBoxes: function (node, recursive) {
 
         node.bbox = [Infinity, Infinity, -Infinity, -Infinity];
 
@@ -129,13 +199,23 @@ rbush.prototype = {
             if (node.leaf) {
                 this._extend(node.bbox, this._toBBox(child));
             } else {
-                this._calcBBoxes(child);
+                if (recursive) {
+                    this._calcBBoxes(child, recursive);
+                }
                 this._extend(node.bbox, child.bbox);
             }
         }
     },
 
-    _chooseSubtree: function (bbox, node) {
+    _adjustBBoxes: function (node, path) {
+        for (var i = path.length - 1; i >= 0; i--) {
+            this._extend(path[i].bbox, node.bbox);
+        }
+    },
+
+    _chooseSubtree: function (bbox, node, path) {
+
+        path.push(node);
 
         if (node.leaf) { return node; }
 
@@ -194,7 +274,7 @@ rbush.prototype = {
             }
         }
 
-        return this._chooseSubtree(bbox, targetNode || child);
+        return this._chooseSubtree(bbox, targetNode || child, path);
     },
 
     _sortEnlargement: function (a, b) {

@@ -39,11 +39,11 @@ for (i = 0; i < 100; i++) {
 }
 console.timeEnd('100 searches 0.01%');
 
-console.time('100 choose subtree 0.01%');
+console.time('100 insert one 0.01%');
 for (i = 0; i < 100; i++) {
-    tree._chooseSubtree(randBox(1), tree.data);
+    tree.insert(randBox(1));
 }
-console.timeEnd('100 choose subtree 0.01%');
+console.timeEnd('100 insert one 0.01%');
 
 // var result, bbox;
 

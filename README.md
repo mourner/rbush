@@ -13,12 +13,12 @@ A spatial index is a special data structure for points and rectangles that allow
 * ~~bulk loading (OMT)~~
 * single insertion (R<sup>*</sup>-tree)
 	* ~~choose subtree~~
-	* reinsert
+	* ~~reinsert~~
 	* split
 		* choose split axis
 		* choose split index
 	* recalculate bboxes
-* bulk insertion (seeded clustering)
+* bulk insertion (STLT or seeded clustering)
 * single removal
 * bulk removal
 
