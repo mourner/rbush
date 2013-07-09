@@ -1,35 +1,45 @@
-<!doctype html>
-
-<title>RBush Tree Visualization</title>
-<canvas id="canvas" width="701" height="701"></canvas>
-
-<script src="../rbush.js"></script>
-<script>
-
-var canvas = document.getElementById('canvas');
-var ctx = canvas.getContext('2d');
-
-var N = 50000,
-    W = 700,
-    data = [];
+var W = 700,
+    canvas = document.getElementById('canvas'),
+    ctx = canvas.getContext('2d');
 
 function randBox(size) {
-    var x = Math.random() * (700 - size),
-        y = Math.random() * (700 - size);
-    return [x, y,
+    var x = Math.random() * (W - size),
+        y = Math.random() * (W - size);
+    return [
+        x, y,
         x + size * Math.random(),
-        y + size * Math.random()];
+        y + size * Math.random()
+    ];
 }
 
-for (var i = 0; i < N; i++) {
-    data[i] = randBox(1);
+function randPoint() {
+    var x = Math.random() * W,
+        y = Math.random() * W;
+    return [x, y];
 }
 
-var tree = rbush(10).load(data);
+function randClusterPoint(dist) {
+    var x = dist + Math.random() * (W - dist * 2),
+        y = dist + Math.random() * (W - dist * 2);
+    return [x, y];
+}
 
-var colors = ['red', 'blue', 'green'];
+function randClusterBox(cluster, dist, size) {
+    var d = Math.random() * dist;
+    var angle = Math.random() * Math.PI * 2;
 
-var rects;
+    var x = cluster[0] + d * Math.cos(d),
+        y = cluster[1] + d * Math.sin(d);
+
+    return [
+        x, y,
+        x + size * Math.random(),
+        y + size * Math.random()
+    ];
+}
+
+var colors = ['red', 'blue', 'green'],
+    rects;
 
 function drawTree(node, level) {
     var rect = [];
@@ -68,17 +78,3 @@ function draw() {
         ctx.strokeRect.apply(ctx, rects[i][2]);
     }
 }
-
-draw();
-
-function insertRandom() {
-    console.time('insert 10 items');
-    for (var i = 0; i < 10; i++) {
-        tree.insert(randBox(1));
-    }
-    console.timeEnd('insert 10 items');
-
-    draw();
-}
-
-</script>
