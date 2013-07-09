@@ -10,23 +10,28 @@ function rbush(maxEntries, format) {
     // jshint newcap: false, validthis: true, evil: true
 
     if (!(this instanceof rbush)) {
+        // allow constructing RBush trees without "new"
         return new rbush(maxEntries, format);
     }
 
     if (!maxEntries) {
+        // maxEntries is required because it's the most important performance decision when using RBush
+        // and depens on the type of data and search queries you perform
         throw new Error("Provide a maxEntries argument to rbush constructor");
     }
+
     this._maxEntries = Math.max(4, maxEntries);
     this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
 
-
-    // customizes data format (minX, minY, maxX, maxY accessors)
+    // data format (minX, minY, maxX, maxY accessors),
+    // uses eval-type function compilation instead of accepting functions to simplify customization;
+    // performance is not affected since this happens only once
 
     format = format || ['[0]', '[1]', '[2]', '[3]'];
 
     this._sortMinX = new Function('a', 'b', 'return a' + format[0] + ' > b' + format[0] + ' ? 1 : -1;');
     this._sortMinY = new Function('a', 'b', 'return a' + format[1] + ' > b' + format[1] + ' ? 1 : -1;');
-    this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+    this._toBBox   = new Function('a',      'return [a' + format.join(', a') + '];');
 }
 
 rbush.prototype = {
@@ -38,16 +43,20 @@ rbush.prototype = {
         return result;
     },
 
-    // bulk load all data and recursively build the tree from stratch
-    load: function (data, utilization) {
+    load: function (data) {
+        // recursively build the tree with the given data from stratch using OMT algorithm
         this.data = this._build(data.slice(), 0);
+
+        // recursively calculate all bboxes
         this._calcBBoxes(this.data, true);
 
         return this;
     },
 
     insert: function (item) {
+        // an index of what tree levels overflowed during this single insert
         this._overflowLevels = {};
+
         console.count('insert');
         this._insert(item);
 
@@ -55,6 +64,7 @@ rbush.prototype = {
     },
 
     toJSON: function () {
+        // TODO cleanup nodes from area, enlargement, sqDist properties
         return this.data;
     },
 
@@ -65,8 +75,10 @@ rbush.prototype = {
 
     _insert: function (item) {
         var bbox = this._toBBox(item),
-            insertPath = [],
-            node = this._chooseSubtree(bbox, this.data, insertPath);
+            insertPath = [];
+
+        // recursively find the best node for accommodating the item, saving all nodes along the path too
+        var node = this._chooseSubtree(bbox, this.data, insertPath);
 
         // put the item into the node
         node.children.push(item);
@@ -86,9 +98,11 @@ rbush.prototype = {
         var firstOverflow = !this._overflowLevels[level];
         this._overflowLevels[level] = true;
 
+        // reinsert a part of node entries if not root and overflowing for the first time on this tree level
         if (level > 0 && firstOverflow) {
             this._reinsert(node, level);
         } else {
+            // otherwise split the node
             this._split(node, level);
         }
     },
@@ -109,7 +123,7 @@ rbush.prototype = {
             child.sqDist = dx * dx + dy * dy;
         }
 
-        // reinsert 30% items that are most far away from the old node bbox center
+        // remove and reinsert 30% entries that are most far away from the node bbox center
         node.children.sort(this._sortDist);
 
         var reinserted = node.children.splice(0, reinsertLen);
@@ -135,10 +149,7 @@ rbush.prototype = {
 
         if (!this._intersects(bbox, node.bbox)) { return; }
 
-        var i, child,
-            len = node.children.length;
-
-        for (i = 0; i < len; i++) {
+        for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
 
             if (!node.leaf) {
@@ -149,7 +160,6 @@ rbush.prototype = {
         }
     },
 
-    // bulk load data with the OMT algorithm
     _build: function (items, level) {
 
         var node = {},
@@ -165,7 +175,7 @@ rbush.prototype = {
         node.children = [];
 
         if (!level) {
-            // target number of root entries
+            // target number of root entries to maximize storage utilization
             M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
 
             items.sort(this._sortMinX);
@@ -176,11 +186,12 @@ rbush.prototype = {
             sortFn = level % 2 === 1 ? this._sortMinX : this._sortMinY,
             i, j, slice, sliceLen, childNode;
 
-        // create S x S entries for the node and build from there recursively
+        // split the items into M mostly square tiles
         for (i = 0; i < N; i += N1) {
             slice = items.slice(i, i + N1).sort(sortFn);
 
             for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
+                // pack each entry recursively
                 childNode = this._build(slice.slice(j, j + N2), level + 1);
                 node.children.push(childNode);
             }
@@ -208,6 +219,7 @@ rbush.prototype = {
     },
 
     _adjustBBoxes: function (node, path) {
+        // adjust bboxes along the given tree path
         for (var i = path.length - 1; i >= 0; i--) {
             this._extend(path[i].bbox, node.bbox);
         }
@@ -219,22 +231,21 @@ rbush.prototype = {
 
         if (node.leaf) { return node; }
 
-        var i, child, targetNode, area, enlargement, overlap, checkOverlap,
-            minArea, minEnlargement, minOverlap,
+        var i, child, targetNode, area, enlargement, overlap, checkOverlap, minArea, minEnlargement, minOverlap,
             len = node.children.length;
 
         minArea = minEnlargement = minOverlap = Infinity;
 
+        // calculate area and enlargement for node entries preliminarily for faster sorting
         for (i = 0; i < len; i++) {
             child = node.children[i];
 
             child.area = this._area(child.bbox);
             child.enlargement = this._enlargedArea(bbox, child.bbox) - child.area;
-            // TODO cleanup in toJSON
         }
 
         if (node.children[0].leaf) {
-            // if node children are leaves, narrow our search to 32 rectangles with least area enlargement
+            // if node children are leaves, narrow our search to 32 rectangles with the least area enlargement
             node.children.sort(this._sortEnlargement);
             len = Math.min(32, len);
             checkOverlap = true;
@@ -242,12 +253,12 @@ rbush.prototype = {
 
         for (i = 0; i < len; i++) {
             child = node.children[i];
+            area = child.area;
+            enlargement = child.enlargement;
 
             if (checkOverlap) {
                 overlap = this._overlapArea(bbox, child, node.children, len);
             }
-            area = child.area;
-            enlargement = child.enlargement;
 
             // choose entry with the least overlap enlargement
             if (checkOverlap && overlap < minOverlap) {
