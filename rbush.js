@@ -164,12 +164,12 @@ rbush.prototype = {
         }
     },
 
-    _reinsert: function (node, level) {
+    _reinsert: function (node) {
         var x = (node.bbox[0] + node.bbox[1]) / 2,
             y = (node.bbox[2] + node.bbox[3]) / 2,
             len = node.children.length,
             reinsertLen = Math.round(len * 0.3),
-            child, i, len, dx, dy, bbox;
+            child, i, dx, dy, bbox;
 
         // calculate distances from node bbox center to children bbox centers
         for (i = 0; i < len; i++) {
