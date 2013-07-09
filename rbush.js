@@ -36,10 +36,12 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
-    // recursively search for objects in a given bbox
     search: function (bbox) {
         var result = [];
+
+        // recursively search for items in a given bbox, collecting matches in the result array
         this._search(bbox, this.data, result);
+
         return result;
     },
 
@@ -71,6 +73,61 @@ rbush.prototype = {
     fromJSON: function (data) {
         this.data = data;
         return this;
+    },
+
+    _search: function (bbox, node, result) {
+
+        if (!this._intersects(bbox, node.bbox)) { return; }
+
+        for (var i = 0, len = node.children.length, child; i < len; i++) {
+            child = node.children[i];
+
+            if (!node.leaf) {
+                this._search(bbox, child, result);
+            } else if (this._intersects(bbox, this._toBBox(child))) {
+                result.push(child);
+            }
+        }
+    },
+
+    _build: function (items, level) {
+
+        var node = {},
+            N = items.length,
+            M = this._maxEntries;
+
+        if (N <= M) {
+            node.children = items;
+            node.leaf = true;
+            return node;
+        }
+
+        node.children = [];
+
+        if (!level) {
+            // target number of root entries to maximize storage utilization
+            M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
+
+            items.sort(this._sortMinX);
+        }
+
+        var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
+            N2 = Math.ceil(N / M),
+            sortFn = level % 2 === 1 ? this._sortMinX : this._sortMinY,
+            i, j, slice, sliceLen, childNode;
+
+        // split the items into M mostly square tiles
+        for (i = 0; i < N; i += N1) {
+            slice = items.slice(i, i + N1).sort(sortFn);
+
+            for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
+                // pack each entry recursively
+                childNode = this._build(slice.slice(j, j + N2), level + 1);
+                node.children.push(childNode);
+            }
+        }
+
+        return node;
     },
 
     _insert: function (item) {
@@ -141,90 +198,6 @@ rbush.prototype = {
         console.count('split');
     },
 
-    _sortDist: function (a, b) {
-        return a.sqDist > b.sqDist ? 1 : -1;
-    },
-
-    _search: function (bbox, node, result) {
-
-        if (!this._intersects(bbox, node.bbox)) { return; }
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-
-            if (!node.leaf) {
-                this._search(bbox, child, result);
-            } else if (this._intersects(bbox, this._toBBox(child))) {
-                result.push(child);
-            }
-        }
-    },
-
-    _build: function (items, level) {
-
-        var node = {},
-            N = items.length,
-            M = this._maxEntries;
-
-        if (N <= M) {
-            node.children = items;
-            node.leaf = true;
-            return node;
-        }
-
-        node.children = [];
-
-        if (!level) {
-            // target number of root entries to maximize storage utilization
-            M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
-
-            items.sort(this._sortMinX);
-        }
-
-        var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
-            N2 = Math.ceil(N / M),
-            sortFn = level % 2 === 1 ? this._sortMinX : this._sortMinY,
-            i, j, slice, sliceLen, childNode;
-
-        // split the items into M mostly square tiles
-        for (i = 0; i < N; i += N1) {
-            slice = items.slice(i, i + N1).sort(sortFn);
-
-            for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
-                // pack each entry recursively
-                childNode = this._build(slice.slice(j, j + N2), level + 1);
-                node.children.push(childNode);
-            }
-        }
-
-        return node;
-    },
-
-    _calcBBoxes: function (node, recursive) {
-
-        node.bbox = [Infinity, Infinity, -Infinity, -Infinity];
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-
-            if (node.leaf) {
-                this._extend(node.bbox, this._toBBox(child));
-            } else {
-                if (recursive) {
-                    this._calcBBoxes(child, recursive);
-                }
-                this._extend(node.bbox, child.bbox);
-            }
-        }
-    },
-
-    _adjustBBoxes: function (node, path) {
-        // adjust bboxes along the given tree path
-        for (var i = path.length - 1; i >= 0; i--) {
-            this._extend(path[i].bbox, node.bbox);
-        }
-    },
-
     _chooseSubtree: function (bbox, node, path) {
 
         path.push(node);
@@ -288,8 +261,37 @@ rbush.prototype = {
         return this._chooseSubtree(bbox, targetNode || child, path);
     },
 
+    _calcBBoxes: function (node, recursive) {
+
+        node.bbox = [Infinity, Infinity, -Infinity, -Infinity];
+
+        for (var i = 0, len = node.children.length, child; i < len; i++) {
+            child = node.children[i];
+
+            if (node.leaf) {
+                this._extend(node.bbox, this._toBBox(child));
+            } else {
+                if (recursive) {
+                    this._calcBBoxes(child, recursive);
+                }
+                this._extend(node.bbox, child.bbox);
+            }
+        }
+    },
+
+    _adjustBBoxes: function (node, path) {
+        // adjust bboxes along the given tree path
+        for (var i = path.length - 1; i >= 0; i--) {
+            this._extend(path[i].bbox, node.bbox);
+        }
+    },
+
     _sortEnlargement: function (a, b) {
         return a.enlargement > b.enlargement ? 1 : -1;
+    },
+
+    _sortDist: function (a, b) {
+        return a.sqDist > b.sqDist ? 1 : -1;
     },
 
     _intersects: function (bbox, bbox2) {
