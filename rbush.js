@@ -71,8 +71,6 @@ rbush.prototype = {
                 bbox: this._toBBox(item)
             };
         } else {
-            // an index of what tree levels overflowed during this single insert
-            this._overflowLevels = {};
             this._insert(item);
         }
 
@@ -183,7 +181,7 @@ rbush.prototype = {
 
         // recursively find the best node for accommodating the item, saving all nodes along the path too
         var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
-            splitOccured, reinsertOccured;
+            splitOccured;
 
         if (typeof level === 'undefined') {
             level = insertPath.length - 1;
@@ -197,66 +195,14 @@ rbush.prototype = {
         do {
             splitOccured = false;
             if (insertPath[level].children.length > this._maxEntries) {
-                splitOccured = this._treatOverflow(insertPath, level);
+                this._split(insertPath, level);
+                splitOccured = true;
                 level--;
-                reinsertOccured = !splitOccured;
             }
         } while (level >= 0 && splitOccured);
 
         // adjust bboxes along the insertion path
-        if (!reinsertOccured) {
-            this._adjustParentBBoxes(bbox, insertPath, level);
-        }
-    },
-
-    _treatOverflow: function (insertPath, level) {
-        var firstOverflow = !this._overflowLevels[level];
-        this._overflowLevels[level] = true;
-
-        // reinsert a part of node entries if not root and overflowing for the first time on this tree level
-        if (level > 0 && firstOverflow) {
-            this._reinsert(insertPath, level);
-            return false;
-        } else {
-            // otherwise split the node
-            this._split(insertPath, level);
-            return true;
-        }
-    },
-
-    _reinsert: function (insertPath, level) {
-        var node = insertPath[level],
-            x = (node.bbox[0] + node.bbox[1]) / 2,
-            y = (node.bbox[2] + node.bbox[3]) / 2,
-            len = node.children.length,
-            reinsertLen = Math.round(len * 0.3),
-            child, i, dx, dy, bbox;
-
-        // calculate distances from node bbox center to children bbox centers
-        for (i = 0; i < len; i++) {
-            child = node.children[i];
-            bbox = node.leaf ? this._toBBox(child) : child.bbox;
-            dx = (bbox[0] + bbox[1]) / 2 - x;
-            dy = (bbox[2] + bbox[3]) / 2 - y;
-            child.sqDist = dx * dx + dy * dy;
-        }
-
-        // remove and reinsert 30% entries that are closest to the node bbox center
-        node.children.sort(this._sortDist);
-
-        var reinserted = node.children.splice(0, reinsertLen);
-
-        // adjust bboxes along insertion path
-        for (i = insertPath.length - 1; i >= 0; i--) {
-            this._calcBBoxes(insertPath[i]);
-        }
-
-        var root = this.data;
-
-        for (i = 0; i < reinsertLen; i++) {
-            this._insert(reinserted[i], level, !node.leaf, root);
-            // TODO side effects of not reinserting to other branch of splitted root?
-        }
+        this._adjustParentBBoxes(bbox, insertPath, level);
     },
 
     _split: function (insertPath, level) {
@@ -386,14 +332,6 @@ rbush.prototype = {
         for (var i = level; i >= 0; i--) {
             this._extend(path[i].bbox, bbox);
         }
-    },
-
-    _sortEnlargement: function (a, b) {
-        return a.enlargement > b.enlargement ? 1 : -1;
-    },
-
-    _sortDist: function (a, b) {
-        return a.sqDist < b.sqDist ? 1 : -1;
     },
 
     _intersects: function (bbox, bbox2) {
