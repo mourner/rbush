@@ -200,6 +200,21 @@ rbush.prototype = {
         return this._chooseSubtree(bbox, targetNode || child, level, path);
     },
 
+    _overlapArea: function (bbox, node, nodes, len) {
+        var newBox = this._extend(node.bbox.slice(), bbox);
+
+        for (var i = 0, sum = 0, bbox2; i < len; i++) {
+            if (node !== nodes[i]) {
+                bbox2 = nodes[i].bbox;
+                if (this._intersects(newBox, bbox2)) {
+                    sum += this._intersectionArea(newBox, bbox2);
+                }
+            }
+        }
+
+        return sum;
+    },
+
     _insert: function (item, level, isNode, root) {
         var bbox = isNode ? item.bbox : this._toBBox(item),
             insertPath = [];
@@ -451,21 +466,6 @@ rbush.prototype = {
     _enlargedArea: function (bbox, bbox2) {
         return (Math.max(bbox2[2], bbox[2]) - Math.min(bbox2[0], bbox[0])) *
                (Math.max(bbox2[3], bbox[3]) - Math.min(bbox2[1], bbox[1]));
-    },
-
-    _overlapArea: function (bbox, node, nodes, len) {
-        var newBox = this._extend(node.bbox.slice(), bbox);
-
-        for (var i = 0, sum = 0, bbox2; i < len; i++) {
-            if (node !== nodes[i]) {
-                bbox2 = nodes[i].bbox;
-                if (this._intersects(newBox, bbox2)) {
-                    sum += this._intersectionArea(newBox, bbox2);
-                }
-            }
-        }
-
-        return sum;
     },
 
     _intersectionArea: function (bbox, bbox2) {
