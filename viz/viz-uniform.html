@@ -4,7 +4,8 @@
 <canvas id="canvas" width="701" height="701"></canvas>
 
 <button id="insert1">Insert 50000 one by one</button>
-<button id="insert2">Insert one</button>
+<button id="insert2">Insert 1000 one by one</button>
+<button id="insert3">Insert one</button>
 
 <script src="../rbush.js"></script>
 <script src="viz.js"></script>
@@ -21,28 +22,27 @@ console.time('load ' + N + ' items');
 var tree = rbush(10).load(data);
 console.timeEnd('load ' + N + ' items');
 
-var K = 50000;
-
-var data2 = [];
-for (var i = 0; i < K; i++) {
-    data2[i] = randBox(1);
-}
-
 draw();
 
-document.getElementById('insert1').onclick = function () {
-    console.time('insert ' + K + ' items');
-    for (var i = 0; i < K; i++) {
-        tree.insert(data2[i]);
-    }
-    console.timeEnd('insert ' + K + ' items');
+function genInsertOneByOne(K) {
+    return function () {
+        var data2 = [];
+        for (var i = 0; i < K; i++) {
+            data2[i] = randBox(1);
+        }
 
-    draw();
+        console.time('insert ' + K + ' items');
+        for (var i = 0; i < K; i++) {
+            tree.insert(data2[i]);
+        }
+        console.timeEnd('insert ' + K + ' items');
+
+        draw();
+    };
 }
 
-document.getElementById('insert2').onclick = function () {
-    console.log('insert 1');
-    tree.insert(randBox(1)); draw();
-};
+document.getElementById('insert1').onclick = genInsertOneByOne(50000);
+document.getElementById('insert2').onclick = genInsertOneByOne(1000);
+document.getElementById('insert3').onclick = genInsertOneByOne(1);
 
 </script>
