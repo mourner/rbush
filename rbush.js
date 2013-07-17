@@ -236,10 +236,9 @@ rbush.prototype = {
 
     _chooseSplitIndex: function (node, m, M) {
 
-        var overlap, area,
-            minOverlap = Infinity,
-            minArea = Infinity,
-            index, i, bbox1, bbox2;
+        var i, bbox1, bbox2, overlap, area, minOverlap, minArea, index;
+
+        minOverlap = minArea = Infinity;
 
         for (i = m; i <= M - m; i++) {
             bbox1 = this._distBBox(node, 0, i);
@@ -257,7 +256,6 @@ rbush.prototype = {
 
             } else if (overlap === minOverlap) {
                 // otherwise choose distribution with minimum area
-
                 if (area < minArea) {
                     minArea = area;
                     index = i;
@@ -275,8 +273,8 @@ rbush.prototype = {
             xMargin = this._allDistMargin(node, m, M, sortMinX),
             yMargin = this._allDistMargin(node, m, M, sortMinY);
 
-        // if total distributions margin value is minimal for x, sort by maxX,
-        // otherwise it's already sorted by maxY
+        // if total distributions margin value is minimal for x, sort by minX,
+        // otherwise it's already sorted by minY
 
         if (xMargin < yMargin) {
             node.children.sort(sortMinX);
@@ -287,9 +285,21 @@ rbush.prototype = {
 
         node.children.sort(sort);
 
-        for (var i = m, margin = 0; i <= M - m; i++) {
-            margin += this._margin(this._distBBox(node, 0, i)) +
-                      this._margin(this._distBBox(node, i, M));
+        var leftBBox = this._distBBox(node, 0, m),
+            rightBBox = this._distBBox(node, M - m, M),
+            margin = this._margin(leftBBox) + this._margin(rightBBox),
+            i, child;
+
+        for (i = m; i < M - m; i++) {
+            child = node.children[i];
+            this._extend(leftBBox, node.leaf ? this._toBBox(child) : child.bbox);
+            margin += this._margin(leftBBox);
+        }
+
+        for (i = M - m - 1; i >= 0; i--) {
+            child = node.children[i];
+            this._extend(rightBBox, node.leaf ? this._toBBox(child) : child.bbox);
+            margin += this._margin(rightBBox);
         }
 
         return margin;
