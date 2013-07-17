@@ -18,12 +18,17 @@ console.time('load ' + N + ' items');
 var tree = rbush(10).load(data);
 console.timeEnd('load ' + N + ' items');
 
-var K = 10000;
+var K = 50000;
+
+var data2 = [];
+for (var i = 0; i < K; i++) {
+    data2[i] = randBox(1);
+}
 
 function insertRandom() {
     console.time('insert ' + K + ' items');
     for (var i = 0; i < K; i++) {
-        tree.insert(randBox(1));
+        tree.insert(data2[i]);
     }
     console.timeEnd('insert ' + K + ' items');
 

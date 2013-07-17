@@ -30,21 +30,21 @@ for (i = 0; i < N; i++) {
 }
 console.timeEnd('load one by one');
 
-console.time('bulk load');
-tree.load(data);
-console.timeEnd('bulk load');
+// console.time('bulk load');
+// tree.load(data);
+// console.timeEnd('bulk load');
 
-console.time('100 searches 1%');
-for (i = 0; i < 100; i++) {
+console.time('1000 searches 1%');
+for (i = 0; i < 1000; i++) {
     tree.search(randBox(10));
 }
-console.timeEnd('100 searches 1%');
+console.timeEnd('1000 searches 1%');
 
-console.time('100 searches 0.01%');
-for (i = 0; i < 100; i++) {
+console.time('1000 searches 0.01%');
+for (i = 0; i < 1000; i++) {
     tree.search(randBox(1));
 }
-console.timeEnd('100 searches 0.01%');
+console.timeEnd('1000 searches 0.01%');
 
 // var result, bbox;
 
@@ -75,16 +75,16 @@ for (var i = 0; i < N; i++) {
 }
 console.timeEnd('old RTree load one by one');
 
-console.time('100 searches 1% 2');
-for (i = 0; i < 100; i++) {
+console.time('1000 searches 1% 2');
+for (i = 0; i < 1000; i++) {
     bbox = randBox(10);
     tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
 }
-console.timeEnd('100 searches 1% 2');
+console.timeEnd('1000 searches 1% 2');
 
-console.time('100 searches 0.01% 2');
-for (i = 0; i < 100; i++) {
+console.time('1000 searches 0.01% 2');
+for (i = 0; i < 1000; i++) {
     bbox = randBox(1);
     tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
 }
-console.timeEnd('100 searches 0.01% 2');
+console.timeEnd('1000 searches 0.01% 2');
