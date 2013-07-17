@@ -42,18 +42,18 @@ var colors = ['red', 'blue', 'green'],
     rects;
 
 function drawTree(node, level) {
+    if (!node) { return; }
+
     var rect = [];
 
-    if (level) {
-        rect.push(colors[(level - 1) % colors.length]);
-        rect.push(1 / level);
-        rect.push([
-            Math.round(node.bbox[0]) + 0.5,
-            Math.round(node.bbox[1]) + 0.5,
-            Math.round(node.bbox[2] - node.bbox[0]),
-            Math.round(node.bbox[3] - node.bbox[1])
-        ]);
-    }
+    rect.push(level ? colors[(level - 1) % colors.length] : 'grey');
+    rect.push(1 / level);
+    rect.push([
+        Math.round(node.bbox[0]) + 0.5,
+        Math.round(node.bbox[1]) + 0.5,
+        Math.round(node.bbox[2] - node.bbox[0]),
+        Math.round(node.bbox[3] - node.bbox[1])
+    ]);
 
     rects.push(rect);
 

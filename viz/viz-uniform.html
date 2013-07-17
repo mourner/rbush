@@ -21,11 +21,7 @@ var K = 10000;
 function insertRandom() {
     console.time('insert ' + K + ' items');
     for (var i = 0; i < K; i++) {
-        try {
-            tree.insert(randBox(1));
-        } catch(e) {
-            console.log('failed at ' + i);
-        }
+        tree.insert(randBox(1));
     }
     console.timeEnd('insert ' + K + ' items');
 
@@ -33,5 +29,11 @@ function insertRandom() {
 }
 
 draw();
+
+window.onkeypress = function () {
+    console.log('press');
+    tree.insert(randBox(1)); draw();
+    tree._checkBBoxes();
+};
 
 </script>
