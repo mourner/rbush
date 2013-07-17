@@ -16,12 +16,18 @@ for (var i = 0; i < N; i++) {
 
 var tree = rbush(10).load(data);
 
+var K = 10000;
+
 function insertRandom() {
-    console.time('insert 10 items');
-    for (var i = 0; i < 10; i++) {
-        tree.insert(randBox(1));
+    console.time('insert ' + K + ' items');
+    for (var i = 0; i < K; i++) {
+        try {
+            tree.insert(randBox(1));
+        } catch(e) {
+            console.log('failed at ' + i);
+        }
     }
-    console.timeEnd('insert 10 items');
+    console.timeEnd('insert ' + K + ' items');
 
     draw();
 }

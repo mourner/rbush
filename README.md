@@ -11,16 +11,10 @@ A spatial index is a special data structure for points and rectangles that allow
 
 * ~~tree search~~
 * ~~bulk loading (OMT)~~
-* single insertion (R<sup>*</sup>-tree)
-	* ~~choose subtree~~
-	* ~~reinsert~~
-	* split
-		* choose split axis
-		* choose split index
-	* recalculate bboxes
+* ~~single insertion (R<sup>*</sup>-tree)~~
 * bulk insertion (STLT or seeded clustering)
-* single removal
-* bulk removal
+* single deletion
+* bulk deletion
 
 ## Usage
 
@@ -65,7 +59,13 @@ tree.load([{
 
 ### Adding and Removing Data
 
-Not supported yet.
+```js
+tree.insert([20, 40, 30, 50]);
+```
+
+Inserting many items one by one is much less efficient than bulk loading and bulk insertion, so avoid it if possible.
+
+Bulk insertion and deletion not yet supported (work in progress).
 
 ### Search
 
