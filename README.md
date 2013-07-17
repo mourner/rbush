@@ -7,15 +7,6 @@ _A work in progress_.
 
 *Spatial index* is a special data structure for points and rectangles that allows you to perform queries like "all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
 
-## Roadmap
-
-* ~~tree search (R-tree)~~
-* ~~bulk loading (OMT)~~
-* ~~single insertion (R-tree with split from R<sup>*</sup>-tree)~~
-* bulk insertion (STLT or seeded clustering)
-* single deletion (R-tree)
-* bulk deletion
-
 ## Usage
 
 ### Creating a Tree
@@ -91,6 +82,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 ## Performance
 
 The following performance test was done by generating random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
+Performed with Node.js on a Retina Macbook Pro mid-2012.
 
 Test                        | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
 --------------------------- | ------ | ------
@@ -105,6 +97,15 @@ Test                        | RBush
 bulk load 1M items          | 4.1s
 1000 searches of 1% area    | 0.9s
 1000 searches of 0.01% area | 0.07s
+
+## Roadmap
+
+* ~~tree search (R-tree)~~
+* ~~bulk loading (OMT)~~
+* ~~single insertion (R-tree with split from R<sup>*</sup>-tree)~~
+* bulk insertion (STLT or seeded clustering)
+* single deletion (R-tree)
+* bulk deletion
 
 ## Papers
 
