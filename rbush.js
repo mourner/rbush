@@ -64,10 +64,17 @@ rbush.prototype = {
     },
 
     insert: function (item) {
-        // an index of what tree levels overflowed during this single insert
-        this._overflowLevels = {};
-
-        this._insert(item);
+        if (!this.data) {
+            this.data = {
+                children: [item],
+                leaf: true,
+                bbox: this._toBBox(item)
+            };
+        } else {
+            // an index of what tree levels overflowed during this single insert
+            this._overflowLevels = {};
+            this._insert(item);
+        }
 
         return this;
     },
