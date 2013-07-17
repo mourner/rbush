@@ -150,76 +150,31 @@ rbush.prototype = {
 
         if (node.leaf || path.length - 1 === level) { return node; }
 
-        var i, child, targetNode, area, enlargement, overlap, checkOverlap, minArea, minEnlargement, minOverlap,
-            len = node.children.length;
+        var i, len, child, targetNode, area, enlargement, minArea, minEnlargement;
 
-        minArea = minEnlargement = minOverlap = Infinity;
+        minArea = minEnlargement = Infinity;
 
-        // calculate area and enlargement for node entries preliminarily for faster sorting
-        for (i = 0; i < len; i++) {
+        for (i = 0, len = node.children.length; i < len; i++) {
             child = node.children[i];
+            area = this._area(child.bbox);
+            enlargement = enlargement = this._enlargedArea(bbox, child.bbox) - area;
 
-            child.area = this._area(child.bbox);
-            child.enlargement = this._enlargedArea(bbox, child.bbox) - child.area;
-        }
-
-        if (node.children[0].leaf) {
-            // if node children are leaves, narrow our search to 32 rectangles with the least area enlargement
-            node.children.sort(this._sortEnlargement);
-            len = Math.min(32, len);
-            checkOverlap = true;
-        }
-
-        for (i = 0; i < len; i++) {
-            child = node.children[i];
-            area = child.area;
-            enlargement = child.enlargement;
-
-            if (checkOverlap) {
-                overlap = this._overlapArea(bbox, child, node.children, len);
-            }
-
-            // choose entry with the least overlap enlargement
-            if (checkOverlap && overlap < minOverlap) {
-                minOverlap = overlap;
-                minEnlargement = enlargement < minEnlargement ? enlargement : minEnlargement;
+            // choose entry with the least area enlargement
+            if (enlargement < minEnlargement) {
+                minEnlargement = enlargement;
                 minArea = area < minArea ? area : minArea;
                 targetNode = child;
 
-            } else if (!checkOverlap || overlap === minOverlap) {
-
-                // otherwise choose entry with the least area enlargement
-                if (enlargement < minEnlargement) {
-                    minEnlargement = enlargement;
-                    minArea = area < minArea ? area : minArea;
+            } else if (enlargement === minEnlargement) {
+                // otherwise choose one with the smallest area
+                if (area < minArea) {
+                    minArea = area;
                     targetNode = child;
-
-                } else if (enlargement === minEnlargement) {
-                    // otherwise choose one with the smallest area
-                    if (area < minArea) {
-                        minArea = area;
-                        targetNode = child;
-                    }
                 }
             }
         }
 
         return this._chooseSubtree(bbox, targetNode || child, level, path);
-    },
-
-    _overlapArea: function (bbox, node, nodes, len) {
-        var newBox = this._extend(node.bbox.slice(), bbox);
-
-        for (var i = 0, sum = 0, bbox2; i < len; i++) {
-            if (node !== nodes[i]) {
-                bbox2 = nodes[i].bbox;
-                if (this._intersects(newBox, bbox2)) {
-                    sum += this._intersectionArea(newBox, bbox2);
-                }
-            }
-        }
-
-        return sum;
     },
 
     _insert: function (item, level, isNode, root) {
