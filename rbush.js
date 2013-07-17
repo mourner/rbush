@@ -392,17 +392,6 @@ rbush.prototype = {
         return margin;
     },
 
-    _distMargin: function (node, k, p) {
-        var bbox = [Infinity, Infinity, -Infinity, -Infinity];
-
-        for (var i = k, child; i < p; i++) {
-            child = node.children[i];
-            this._extend(bbox, node.leaf ? this._toBBox(child) : child.bbox);
-        }
-
-        return (bbox[2] - bbox[0]) + (bbox[3] - bbox[1]);
-    },
-
     _distBBox: function (node, k, p) {
         var bbox = [Infinity, Infinity, -Infinity, -Infinity];
 
