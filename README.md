@@ -1,11 +1,11 @@
 RBush
 =====
 
-A high-performance JavaScript library for 2D spatial indexing of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner),
+RBush is a high-performance JavaScript library for 2D **spatial indexing** of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner),
 based on an optimized **R-tree** data structure with **bulk loading** and **bulk insertion** algorithms.
 _A work in progress_.
 
-A spatial index is a special data structure for points and rectangles that allows you to perform queries like "give me all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
+*Spatial index* is a special data structure for points and rectangles that allows you to perform queries like "all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
 
 ## Roadmap
 
@@ -75,7 +75,7 @@ var result = tree.search([40, 20, 80, 70]);
 
 Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
 
-## Export and Import
+### Export and Import
 
 ```js
 // export data as JSON object
@@ -87,6 +87,24 @@ var tree = rbush(4).fromJSON(treeData);
 
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
 e.g. first indexing the data on the server and and then importing the resulting tree data on the client for searching.
+
+## Performance
+
+The following performance test was done by generating random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
+
+Test                        | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
+--------------------------- | ------ | ------
+insert 1M items one by one  | 9.1s   | 13.2s
+1000 searches of 1% area    | 1.2s   | 7.7s
+1000 searches of 0.01% area | 0.1s   | 4.7s
+
+If you use the bulk loading feature, everything works even faster:
+
+Test                        | RBush
+--------------------------- | ------
+bulk load 1M items          | 4.1s
+1000 searches of 1% area    | 0.9s
+1000 searches of 0.01% area | 0.07s
 
 ## Papers
 
