@@ -31,13 +31,9 @@ function rbush(maxEntries, format) {
 
     this._sortMinX = this._createSort(format[0]);
     this._sortMinY = this._createSort(format[1]);
-    this._sortMaxX = this._createSort(format[2]);
-    this._sortMaxY = this._createSort(format[3]);
 
     this._sortNodeMinX = this._createSort('.bbox[0]');
     this._sortNodeMinY = this._createSort('.bbox[1]');
-    this._sortNodeMaxX = this._createSort('.bbox[2]');
-    this._sortNodeMaxY = this._createSort('.bbox[3]');
 
     this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
 }
@@ -172,7 +168,7 @@ rbush.prototype = {
             }
         }
 
-        return this._chooseSubtree(bbox, targetNode || child, level, path);
+        return this._chooseSubtree(bbox, targetNode, level, path);
     },
 
     _insert: function (item, level, isNode, root) {
@@ -271,18 +267,15 @@ rbush.prototype = {
     _chooseSplitAxis: function (node, m, M) {
 
         var sortMinX = node.leaf ? this._sortMinX : this._sortNodeMinX,
-            sortMaxX = node.leaf ? this._sortMaxX : this._sortNodeMaxX,
             sortMinY = node.leaf ? this._sortMinY : this._sortNodeMinY,
-            sortMaxY = node.leaf ? this._sortMaxY : this._sortNodeMaxY,
-
-            xMargin = this._allDistMargin(node, m, M, sortMinX) + this._allDistMargin(node, m, M, sortMaxX),
-            yMargin = this._allDistMargin(node, m, M, sortMinY) + this._allDistMargin(node, m, M, sortMaxY);
+            xMargin = this._allDistMargin(node, m, M, sortMinX),
+            yMargin = this._allDistMargin(node, m, M, sortMinY);
 
         // if total distributions margin value is minimal for x, sort by maxX,
         // otherwise it's already sorted by maxY
 
         if (xMargin < yMargin) {
-            node.children.sort(sortMaxX);
+            node.children.sort(sortMinX);
         }
     },
 
