@@ -307,7 +307,7 @@ rbush.prototype = {
     _split: function (insertPath, level) {
         var node = insertPath[level],
             M = node.children.length,
-            m = Math.ceil(M * 0.4);
+            m = this._minFill;
 
         this._chooseSplitAxis(node, m, M);
 
