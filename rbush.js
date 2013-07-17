@@ -228,7 +228,7 @@ rbush.prototype = {
 
         // recursively find the best node for accommodating the item, saving all nodes along the path too
         var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
-            splitOccured;
+            splitOccured, reinsertOccured;
 
         if (typeof level === 'undefined') {
             level = insertPath.length - 1;
@@ -236,7 +236,6 @@ rbush.prototype = {
 
         // put the item into the node
         node.children.push(item);
-
         this._extend(node.bbox, bbox);
 
         // deal with node overflow if it happened
@@ -245,11 +244,14 @@ rbush.prototype = {
             if (insertPath[level].children.length > this._maxEntries) {
                 splitOccured = this._treatOverflow(insertPath, level);
                 level--;
+                reinsertOccured = !splitOccured;
             }
         } while (level >= 0 && splitOccured);
 
         // adjust bboxes along the insertion path
-        this._adjustParentBBoxes(node, insertPath, level);
+        if (!reinsertOccured) {
+            this._adjustParentBBoxes(bbox, insertPath, level);
+        }
     },
 
     _treatOverflow: function (insertPath, level) {
@@ -258,7 +260,7 @@ rbush.prototype = {
 
         // reinsert a part of node entries if not root and overflowing for the first time on this tree level
         if (level > 0 && firstOverflow) {
-            this._reinsert(insertPath[level], level);
+            this._reinsert(insertPath, level);
             return false;
         } else {
             // otherwise split the node
@@ -267,8 +269,9 @@ rbush.prototype = {
         }
     },
 
-    _reinsert: function (node, level) {
-        var x = (node.bbox[0] + node.bbox[1]) / 2,
+    _reinsert: function (insertPath, level) {
+        var node = insertPath[level],
+            x = (node.bbox[0] + node.bbox[1]) / 2,
             y = (node.bbox[2] + node.bbox[3]) / 2,
             len = node.children.length,
             reinsertLen = Math.round(len * 0.3),
@@ -288,8 +291,10 @@ rbush.prototype = {
 
         var reinserted = node.children.splice(0, reinsertLen);
 
-        this._calcBBoxes(node);
-        // TODO adjust along path?
+        // adjust bboxes along insertion path
+        for (i = insertPath.length - 1; i >= 0; i--) {
+            this._calcBBoxes(insertPath[i]);
+        }
 
         var root = this.data;
 
@@ -421,10 +426,10 @@ rbush.prototype = {
         }
     },
 
-    _adjustParentBBoxes: function (node, path, level) {
+    _adjustParentBBoxes: function (bbox, path, level) {
         // adjust bboxes along the given tree path
         for (var i = level; i >= 0; i--) {
-            this._extend(path[i].bbox, node.bbox);
+            this._extend(path[i].bbox, bbox);
         }
     },
 
