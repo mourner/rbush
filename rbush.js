@@ -140,35 +140,39 @@ rbush.prototype = {
 
     _chooseSubtree: function (bbox, node, level, path) {
 
-        path.push(node);
-
-        if (node.leaf || path.length - 1 === level) { return node; }
-
         var i, len, child, targetNode, area, enlargement, minArea, minEnlargement;
 
-        minArea = minEnlargement = Infinity;
+        while (true) {
+            path.push(node);
 
-        for (i = 0, len = node.children.length; i < len; i++) {
-            child = node.children[i];
-            area = this._area(child.bbox);
-            enlargement = enlargement = this._enlargedArea(bbox, child.bbox) - area;
+            if (node.leaf || path.length - 1 === level) { break; }
 
-            // choose entry with the least area enlargement
-            if (enlargement < minEnlargement) {
-                minEnlargement = enlargement;
-                minArea = area < minArea ? area : minArea;
-                targetNode = child;
+            minArea = minEnlargement = Infinity;
 
-            } else if (enlargement === minEnlargement) {
-                // otherwise choose one with the smallest area
-                if (area < minArea) {
-                    minArea = area;
+            for (i = 0, len = node.children.length; i < len; i++) {
+                child = node.children[i];
+                area = this._area(child.bbox);
+                enlargement = this._enlargedArea(bbox, child.bbox) - area;
+
+                // choose entry with the least area enlargement
+                if (enlargement < minEnlargement) {
+                    minEnlargement = enlargement;
+                    minArea = area < minArea ? area : minArea;
                     targetNode = child;
+
+                } else if (enlargement === minEnlargement) {
+                    // otherwise choose one with the smallest area
+                    if (area < minArea) {
+                        minArea = area;
+                        targetNode = child;
+                    }
                 }
             }
+
+            node = targetNode;
         }
 
-        return this._chooseSubtree(bbox, targetNode, level, path);
+        return node;
     },
 
     _insert: function (item, level, isNode, root) {
