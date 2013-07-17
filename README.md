@@ -2,18 +2,18 @@ RBush
 =====
 
 A high-performance JavaScript library for 2D spatial indexing of points and rectangles by [Vladimir Agafonkin](http://github.com/mourner),
-based on **R<sup>*</sup>-tree** data structure with **bulk loading** and **bulk insertion** algorithms.
+based on an optimized **R-tree** data structure with **bulk loading** and **bulk insertion** algorithms.
 _A work in progress_.
 
 A spatial index is a special data structure for points and rectangles that allows you to perform queries like "give me all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
 
 ## Roadmap
 
-* ~~tree search~~
+* ~~tree search (R-tree)~~
 * ~~bulk loading (OMT)~~
-* ~~single insertion (R<sup>*</sup>-tree)~~
+* ~~single insertion (R-tree with split from R<sup>*</sup>-tree)~~
 * bulk insertion (STLT or seeded clustering)
-* single deletion
+* single deletion (R-tree)
 * bulk deletion
 
 ## Usage
@@ -77,7 +77,7 @@ Returns an array of data items (points or rectangles) that the given bounding bo
 
 ## Export and Import
 
-```
+```js
 // export data as JSON object
 tree.toJSON();
 
