@@ -261,7 +261,7 @@ rbush.prototype = {
             child.sqDist = dx * dx + dy * dy;
         }
 
-        // remove and reinsert 30% entries that are most far away from the node bbox center
+        // remove and reinsert 30% entries that are closest to the node bbox center
         node.children.sort(this._sortDist);
 
         var reinserted = node.children.splice(0, reinsertLen);
@@ -422,7 +422,7 @@ rbush.prototype = {
     },
 
     _sortDist: function (a, b) {
-        return a.sqDist > b.sqDist ? 1 : -1;
+        return a.sqDist < b.sqDist ? 1 : -1;
     },
 
     _intersects: function (bbox, bbox2) {
