@@ -35,7 +35,7 @@ function randClusterBox(cluster, dist, size) {
     ];
 }
 
-var colors = ['red', 'blue', 'green'],
+var colors = ['#f40', '#37f', '#0b0'],
     rects;
 
 function drawTree(node, level) {
@@ -44,7 +44,7 @@ function drawTree(node, level) {
     var rect = [];
 
     rect.push(level ? colors[(level - 1) % colors.length] : 'grey');
-    rect.push(1 / level);
+    rect.push(level ? 1 / level : 1);
     rect.push([
         Math.round(node.bbox[0]) + 0.5,
         Math.round(node.bbox[1]) + 0.5,
@@ -55,7 +55,7 @@ function drawTree(node, level) {
     rects.push(rect);
 
     if (node.leaf) return;
-    //if (level === 8) { return; }
+    if (level === 6) { return; }
 
     for (var i = 0; i < node.children.length; i++) {
         drawTree(node.children[i], level + 1);
