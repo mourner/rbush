@@ -31,6 +31,8 @@ It drastically affects the performance, so you should adjust it considering the 
 
 ### Loading Data
 
+Build a tree with the given data from scratch:
+
 ```js
 tree.load([
 	[10, 10, 15, 20],
@@ -39,8 +41,7 @@ tree.load([
 ]);
 ```
 
-Builds a tree with the given rectangle data from scratch.
-Bulk loading like this is many times faster than inserting data items one by one.
+That's usually ~2-3 times faster than inserting items one by one.
 
 #### Data Format
 
@@ -61,13 +62,26 @@ tree.load([{
 
 ### Adding and Removing Data
 
+Insert an item:
+
 ```js
-tree.insert([20, 40, 30, 50]);
+var item = [20, 40, 30, 50];
+tree.insert(item);
 ```
 
-Inserting many items one by one is much less efficient than bulk loading and bulk insertion, so avoid it if possible.
+Remove a previously inserted item:
 
-Bulk insertion and deletion not yet supported (work in progress).
+```js
+tree.remove(item);
+```
+
+Clear all items:
+
+```js
+tree.clear();
+```
+
+Bulk insertion not yet supported (a work in progress).
 
 ### Search
 

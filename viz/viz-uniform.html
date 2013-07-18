@@ -43,6 +43,21 @@ function genInsertOneByOne(K) {
     };
 }
 
+function remove() {
+    data.sort(tree._sortMinX);
+    console.time('remove 10k');
+    for (var i = 0; i < 10000; i++) {
+        tree.remove(data[i]);
+    }
+    console.timeEnd('remove 10k');
+
+    console.time('condense');
+    tree.condense();
+    console.timeEnd('condence');
+
+    draw();
+}
+
 document.getElementById('insert1').onclick = genInsertOneByOne(50000);
 document.getElementById('insert2').onclick = genInsertOneByOne(1000);
 document.getElementById('insert3').onclick = genInsertOneByOne(1);

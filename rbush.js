@@ -90,6 +90,64 @@ rbush.prototype = {
         return this;
     },
 
+    clear: function () {
+        delete this.data;
+        return this;
+    },
+
+    remove: function (item) {
+        var node = this.data,
+            bbox = this._toBBox(item);
+
+        if (!node || !this._intersects(bbox, node.bbox)) { return false; }
+
+        var nodesToSearch = [],
+            path = [],
+            i, len, child, index;
+
+        while (node) {
+            for (i = 0, len = node.children.length; i < len; i++) {
+                child = node.children[i];
+
+                if (node.leaf) {
+                    index = node.children.indexOf(item);
+                    if (index !== -1) {
+                        node.children.splice(index, 1);
+                        this._calcBBoxes(node);
+                        return true;
+                    }
+                } else if (this._intersects(bbox, child.bbox)) {
+                    nodesToSearch.push(child);
+                }
+
+            }
+
+            node = nodesToSearch.pop();
+        }
+
+        return false;
+    },
+
+    condense: function (node, parent) {
+        node = node || this.data;
+
+        for (var i = 0, len = node.children.length, child; i < len; i++) {
+            child = node.children[i];
+
+            if (child.children) {
+                if (this.condense(child, node.children)) {
+                    i--;
+                    len--;
+                }
+            }
+        }
+
+        if (parent && node.children.length === 0) {
+            parent.splice(parent.indexOf(node), 1);
+            return true;
+        }
+    },
+
     toJSON: function () {
         // TODO cleanup nodes from area, enlargement, sqDist properties
         return this.data;
@@ -97,11 +155,6 @@ rbush.prototype = {
 
     fromJSON: function (data) {
         this.data = data;
-        return this;
-    },
-
-    clear: function () {
-        delete this.data;
         return this;
     },
 
