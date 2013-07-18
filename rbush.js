@@ -83,6 +83,11 @@ rbush.prototype = {
         return this;
     },
 
+    clear: function () {
+        delete this.data;
+        return this;
+    },
+
     _search: function (bbox, node, result) {
 
         if (!this._intersects(bbox, node.bbox)) { return; }
