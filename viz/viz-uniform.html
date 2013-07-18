@@ -47,4 +47,10 @@ document.getElementById('insert1').onclick = genInsertOneByOne(50000);
 document.getElementById('insert2').onclick = genInsertOneByOne(1000);
 document.getElementById('insert3').onclick = genInsertOneByOne(1);
 
+document.getElementById('canvas').onclick = function (e) {
+    console.time('1 pixel search');
+    tree.search([e.clientX, e.clientY, e.clientX + 1, e.clientY + 1]);
+    console.timeEnd('1 pixel search');
+};
+
 </script>
