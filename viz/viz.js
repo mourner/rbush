@@ -25,11 +25,8 @@ function randClusterPoint(dist) {
 }
 
 function randClusterBox(cluster, dist, size) {
-    var d = Math.random() * dist;
-    var angle = Math.random() * Math.PI * 2;
-
-    var x = cluster[0] + d * Math.cos(d),
-        y = cluster[1] + d * Math.sin(d);
+    var x = cluster[0] - dist + 2 * dist * (Math.random() + Math.random() + Math.random()) / 3,
+        y = cluster[1] - dist + 2 * dist * (Math.random() + Math.random() + Math.random()) / 3;
 
     return [
         x, y,

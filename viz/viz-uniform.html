@@ -2,7 +2,7 @@
 
 <title>RBush Tree Visualization</title>
 <canvas id="canvas" width="701" height="701"></canvas>
-
+<br>
 <button id="insert1">Insert 50000 one by one</button>
 <button id="insert2">Insert 1000 one by one</button>
 <button id="insert3">Insert one</button>
@@ -11,12 +11,17 @@
 <script src="viz.js"></script>
 <script>
 
-var N = 50000,
-    data = [];
+var N = 50000;
 
-for (var i = 0; i < N; i++) {
-    data[i] = randBox(1);
+function genData(N) {
+    var data = [];
+    for (var i = 0; i < N; i++) {
+        data[i] = randBox(1);
+    }
+    return data;
 }
+
+var data = genData(N);
 
 console.time('load ' + N + ' items');
 var tree = rbush(10).load(data);
@@ -26,10 +31,7 @@ draw();
 
 function genInsertOneByOne(K) {
     return function () {
-        var data2 = [];
-        for (var i = 0; i < K; i++) {
-            data2[i] = randBox(1);
-        }
+        var data2 = genData(K);
 
         console.time('insert ' + K + ' items');
         for (var i = 0; i < K; i++) {

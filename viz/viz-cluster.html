@@ -2,36 +2,55 @@
 
 <title>RBush Tree Visualization</title>
 <canvas id="canvas" width="701" height="701"></canvas>
+<br>
+<button id="insert1">Insert 50000 one by one</button>
+<button id="insert2">Insert 1000 one by one</button>
+<button id="insert3">Insert one</button>
 
 <script src="../rbush.js"></script>
 <script src="viz.js"></script>
 <script>
 
 var N = 50000,
-    M = 20,
-    R = 100,
-    data = [];
+    M = 30,
+    R = 100;
 
-for (var i = 0; i < M; i++) {
-    var cluster = randClusterPoint(R);
+function genData(N, M, R) {
+    var data = [];
+    for (var i = 0; i < M; i++) {
+        var cluster = randClusterPoint(R);
 
-    for (var j = 0; j < N / M; j++) {
-        data.push(randClusterBox(cluster, R, 1));
+        for (var j = 0; j < N / M; j++) {
+            data.push(randClusterBox(cluster, R, 1));
+        }
     }
+    return data;
 }
 
+var data = genData(N, M, R);
+
+console.time('load ' + N + ' items');
 var tree = rbush(10).load(data);
-
-function insertRandom() {
-    console.time('insert 10 items');
-    for (var i = 0; i < 10; i++) {
-        tree.insert(randBox(1));
-    }
-    console.timeEnd('insert 10 items');
-
-    draw();
-}
+console.timeEnd('load ' + N + ' items');
 
 draw();
+
+function genInsertOneByOne(K) {
+    return function () {
+        var data2 = genData(K, M, R);
+
+        console.time('insert ' + K + ' items');
+        for (var i = 0; i < K; i++) {
+            tree.insert(data2[i]);
+        }
+        console.timeEnd('insert ' + K + ' items');
+
+        draw();
+    };
+}
+
+document.getElementById('insert1').onclick = genInsertOneByOne(50000);
+document.getElementById('insert2').onclick = genInsertOneByOne(1000);
+document.getElementById('insert3').onclick = genInsertOneByOne(1);
 
 </script>
