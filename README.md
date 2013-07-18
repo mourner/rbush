@@ -7,6 +7,17 @@ _A work in progress_.
 
 *Spatial index* is a special data structure for points and rectangles that allows you to perform queries like "all items within this bounding box" very efficiently (e.g. hundreds of times faster than looping over all items). It's most commonly used in maps and data visualizations.
 
+
+## Demos
+
+The demos contain visualization of trees generated from 50k bulk-loaded random points.
+Open web console to see benchmarks;
+click on buttons to insert more items;
+click to perform search under the cursor.
+
+* [uniformly distributed random data](http://mourner.github.io/rbush/viz/viz-uniform.html)
+* [randomly clustered data](http://mourner.github.io/rbush/viz/viz-cluster.html)
+
 ## Usage
 
 ### Creating a Tree
