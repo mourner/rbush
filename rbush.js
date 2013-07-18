@@ -41,10 +41,27 @@ function rbush(maxEntries, format) {
 rbush.prototype = {
 
     search: function (bbox) {
-        var result = [];
 
-        // recursively search for items in a given bbox, collecting matches in the result array
-        this._search(bbox, this.data, result);
+        var node = this.data,
+            result = [];
+
+        if (!node || !this._intersects(bbox, node.bbox)) { return result; }
+
+        var nodesToSearch = [],
+            i, len, child, childBBox;
+
+        while (node) {
+            for (i = 0, len = node.children.length; i < len; i++) {
+                child = node.children[i];
+                childBBox = node.leaf ? this._toBBox(child) : child.bbox;
+
+                if (this._intersects(bbox, childBBox)) {
+                    (node.leaf ? result : nodesToSearch).push(child);
+                }
+            }
+
+            node = nodesToSearch.pop();
+        }
 
         return result;
     },
@@ -86,21 +103,6 @@ rbush.prototype = {
     clear: function () {
         delete this.data;
         return this;
-    },
-
-    _search: function (bbox, node, result) {
-
-        if (!this._intersects(bbox, node.bbox)) { return; }
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-
-            if (!node.leaf) {
-                this._search(bbox, child, result);
-            } else if (this._intersects(bbox, this._toBBox(child))) {
-                result.push(child);
-            }
-        }
     },
 
     _build: function (items, level) {
