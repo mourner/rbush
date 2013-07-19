@@ -97,55 +97,56 @@ rbush.prototype = {
 
     remove: function (item) {
         var node = this.data,
-            bbox = this._toBBox(item);
-
-        if (!node || !this._intersects(bbox, node.bbox)) { return false; }
-
-        var nodesToSearch = [],
+            bbox = this._toBBox(item),
             path = [],
-            i, len, child, index;
+            indexes = [],
+            i, parent, index, goingUp;
 
-        while (node) {
-            for (i = 0, len = node.children.length; i < len; i++) {
-                child = node.children[i];
-
+        // depth-first iterative tree traversal
+        while (node || path.length) {
+            if (node) {
                 if (node.leaf) {
                     index = node.children.indexOf(item);
+
+                    // item found; remove and condense tree upwards
                     if (index !== -1) {
                         node.children.splice(index, 1);
-                        this._calcBBoxes(node);
+
+                        path.push(node);
+                        this._condense(path);
+
                         return true;
                     }
-                } else if (this._intersects(bbox, child.bbox)) {
-                    nodesToSearch.push(child);
                 }
 
-            }
+                if (!goingUp && !node.leaf && this._intersects(bbox, node.bbox)) {
+                    // go down
+                    path.push(node);
+                    indexes.push(i);
+                    parent = node;
+                    i = 0;
+                    node = node.children[i];
 
-            node = nodesToSearch.pop();
+                } else if (parent) {
+                    // go right
+                    i++;
+                    node = parent.children[i];
+                    goingUp = false;
+
+                } else {
+                    // nothing found
+                    node = null;
+                }
+            } else {
+                // go up
+                node = path.pop();
+                parent = path[path.length - 1];
+                i = indexes.pop();
+                goingUp = true;
+            }
         }
 
         return false;
-    },
-
-    condense: function (node, parent) {
-        node = node || this.data;
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-
-            if (child.children) {
-                if (this.condense(child, node.children)) {
-                    i--;
-                    len--;
-                }
-            }
-        }
-
-        if (parent && node.children.length === 0) {
-            parent.splice(parent.indexOf(node), 1);
-            return true;
-        }
     },
 
     toJSON: function () {
@@ -398,6 +399,18 @@ rbush.prototype = {
         // adjust bboxes along the given tree path
         for (var i = level; i >= 0; i--) {
             this._extend(path[i].bbox, bbox);
+        }
+    },
+
+    _condense: function (path) {
+        // go through the path, removing empty nodes and updating bboxes
+        for (var i = path.length - 1, parent; i >= 0; i--) {
+            if (i > 0 && path[i].children.length === 0) {
+                parent = path[i - 1].children;
+                parent.splice(parent.indexOf(path[i]), 1);
+            } else {
+                this._calcBBoxes(path[i]);
+            }
         }
     },
 
