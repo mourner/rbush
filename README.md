@@ -3,7 +3,7 @@ RBush
 
 RBush is a high-performance JavaScript library for 2D **spatial indexing** of points and rectangles
 by [Vladimir Agafonkin](http://github.com/mourner),
-based on an optimized **R-tree** data structure with **bulk loading** support.
+based on an optimized **R-tree** data structure with **bulk insertion** support.
 
 *Spatial index* is a special data structure for points and rectangles
 that allows you to perform queries like "all items within this bounding box" very efficiently
@@ -24,15 +24,15 @@ click to perform search under the cursor.
 
 The following sample performance test was done by generating
 random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
-Performed with Node.js on a Retina Macbook Pro mid-2012.
+Performed with Node.js on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
 ---------------------------- | ------ | ------
 insert 1M items one by one   | 9.25s  | 13.12s
-bulk load 1M items           | 4.14s  | n/a
 1000 searches of 1% area     | 1.22s  | 7.52s
 1000 searches of 0.01% area  | 0.09s  | 4.21s
 remove 1000 items one by one | 0.04s  | 2.68s
+bulk insert 1M items         | 3.9s   | n/a
 
 ## Usage
 
@@ -78,9 +78,9 @@ Clear all items:
 tree.clear();
 ```
 
-### Loading Data
+### Bulk-inserting Data
 
-Build a tree with the given data from scratch:
+Bulk-insert te given data into the tree:
 
 ```js
 tree.load([
@@ -90,8 +90,13 @@ tree.load([
 ]);
 ```
 
-Bulk loading is usually ~2-3 times faster than inserting items one by one,
-and subsequent query performance is also ~20-30% better.
+Bulk insertion is usually ~2-3 times faster than inserting items one by one.
+After bulk loading (bulk insertion into an empty tree), subsequent query performance is also ~20-30% better.
+
+When you do bulk insertion into an existing tree, it bulk-loads the given data into a separate tree
+and inserts the smaller tree into the larger tree.
+This means that bulk insertion works very well for clustered data (where items are close to each other),
+but makes query performance worse if the data is scattered.
 
 ### Search
 
@@ -119,23 +124,15 @@ e.g. first indexing the data on the server and and then importing the resulting 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
 * bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading)
+* bulk insertion: STLT algorithm (Small-Tree-Large-Tree)
 * search: standard non-recursive R-tree search
-
-## Roadmap
-
-* ~~tree search~~
-* ~~bulk loading~~
-* ~~single insertion~~
-* ~~single deletion~~
-* bulk insertion (STLT or seeded clustering)
-* area deletion
 
 ## Papers
 
 * [R-trees: a Dynamic Index Structure For Spatial Searching](http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf)
 * [The R*-tree: An Efficient and Robust Access Method for Points and Rectangles+](http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf)
 * [OMT: Overlap Minimizing Top-down Bulk Loading Algorithm for R-tree](http://ftp.informatik.rwth-aachen.de/Publications/CEUR-WS/Vol-74/files/FORUM_18.pdf)
-* [Bulk Insertion for R-trees by Seeded Clustering](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
+* [Bulk Insertions into R-Trees Using the Small-Tree-Large-Tree Approach](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
 * [R-Trees: Theory and Applications (book)](http://metro-natshar-31-71.brain.net.pk/articles/1852339772.pdf)
 
 ## License

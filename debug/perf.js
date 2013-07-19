@@ -52,6 +52,28 @@ for (i = 0; i < 1000; i++) {
 }
 console.timeEnd('remove 1000 one by one');
 
+var data3 = [];
+for (var i = 0; i < N; i++) {
+    data3[i] = randBox(1);
+}
+
+console.time('bulk-insert 1M more');
+tree.load(data3);
+console.timeEnd('bulk-insert 1M more');
+
+console.time('1000 searches 1%');
+for (i = 0; i < 1000; i++) {
+    tree.search(randBox(10));
+}
+console.timeEnd('1000 searches 1%');
+
+console.time('1000 searches 0.01%');
+for (i = 0; i < 1000; i++) {
+    tree.search(randBox(1));
+}
+console.timeEnd('1000 searches 0.01%');
+
+
 // var result, bbox;
 
 // console.time('100 naive searches 1%');
