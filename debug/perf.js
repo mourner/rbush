@@ -46,11 +46,11 @@ for (i = 0; i < 1000; i++) {
 }
 console.timeEnd('1000 searches 0.01%');
 
-console.time('remove 10000 one by one');
-for (i = 0; i < 10000; i++) {
+console.time('remove 1000 one by one');
+for (i = 0; i < 1000; i++) {
     tree.remove(data[i]);
 }
-console.timeEnd('remove 10000 one by one');
+console.timeEnd('remove 1000 one by one');
 
 // var result, bbox;
 
@@ -95,8 +95,8 @@ for (i = 0; i < 1000; i++) {
 }
 console.timeEnd('1000 searches 0.01% 2');
 
-console.time('old RTree remove 10000 one by one');
-for (var i = 0; i < 10000; i++) {
+console.time('old RTree remove 1000 one by one');
+for (var i = 0; i < 1000; i++) {
     tree2.remove(data2[i], i);
 }
-console.timeEnd('old RTree remove 10000 one by one');
+console.timeEnd('old RTree remove 1000 one by one');
