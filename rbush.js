@@ -30,6 +30,13 @@ function rbush(maxEntries, format) {
     this._sortNodeMinY = this._createSort('.bbox[1]');
 
     this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+
+    this.data = {
+        children: [],
+        leaf: true,
+        bbox: [Infinity, Infinity, -Infinity, -Infinity],
+        height: 1
+    };
 }
 
 rbush.prototype = {
@@ -71,16 +78,7 @@ rbush.prototype = {
     },
 
     insert: function (item) {
-        if (!this.data) {
-            this.data = {
-                children: [item],
-                leaf: true,
-                bbox: this._toBBox(item)
-            };
-        } else {
-            this._insert(item);
-        }
-
+        this._insert(item);
         return this;
     },
 
@@ -162,8 +160,11 @@ rbush.prototype = {
         node.children = [];
 
         if (!level) {
+            // target height of the bulk-loaded tree
+            var H = node.height = Math.ceil(Math.log(N) / Math.log(M));
+
             // target number of root entries to maximize storage utilization
-            M = Math.ceil(N / Math.pow(M, Math.ceil(Math.log(N) / Math.log(M)) - 1));
+            M = Math.ceil(N / Math.pow(M, H - 1));
 
             items.sort(this._sortMinX);
         }
@@ -279,6 +280,8 @@ rbush.prototype = {
             // split root node
             this.data = {};
             this.data.children = [node, newNode];
+            this.data.height = node.height + 1;
+            delete node.height;
             this._calcBBoxes(this.data);
         }
     },
@@ -440,6 +443,7 @@ rbush.prototype = {
     },
 
     _createSort: function (accessor) {
+        // jshint evil: true
         return new Function('a', 'b', 'return a' + accessor + ' > b' + accessor + ' ? 1 : -1;');
     }
 };

@@ -31,7 +31,7 @@ describe('rbush', function () {
             {"children":[[70,70,70,70],[70,95,70,95],[75,50,75,50],[75,75,75,75]],"leaf":true,"bbox":[70,50,75,95]},
             {"children":[[85,60,85,60],[85,85,85,85],[95,70,95,70],[95,95,95,95]],"leaf":true,"bbox":[85,60,95,95]}
         ], "bbox":[70,0,95,95]
-    }], "bbox":[0,0,95,95]};
+    }], "bbox":[0,0,95,95], "height": 3};
 
     describe('constructor', function () {
         it('accepts a format argument to customize the data format', function () {
