@@ -113,7 +113,7 @@ rbush.prototype = {
                     node.children.splice(index, 1);
                     path.push(node);
                     this._condense(path);
-                    return true;
+                    return this;
                 }
             }
 
@@ -134,7 +134,7 @@ rbush.prototype = {
             }
         }
 
-        return false;
+        return this;
     },
 
     toJSON: function () {
