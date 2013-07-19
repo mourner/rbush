@@ -65,11 +65,36 @@ rbush.prototype = {
     load: function (data) {
         if (!(data && data.length)) { return this; }
 
-        // recursively build the tree with the given data from stratch using OMT algorithm
-        this.data = this._build(data.slice(), 0);
+        if (data.length < this._minFill) {
+            for (var i = 0, len = data.length; i < len; i++) {
+                this.insert(data[i]);
+            }
+            return this;
+        }
 
-        // recursively calculate all bboxes
-        this._calcBBoxes(this.data, true);
+        // recursively build the tree with the given data from stratch using OMT algorithm
+        var node = this._build(data.slice(), 0);
+        this._calcBBoxes(node, true);
+
+        if (!this.data.children.length) {
+            // save as is if tree is empty
+            this.data = node;
+
+        } else if (this.data.height === node.height) {
+            // split root if trees have the same height
+            this._splitRoot(this.data, node);
+
+        } else {
+            if (this.data.height < node.height) {
+                // swap trees if loaded one is bigger
+                var tmpNode = this.data;
+                this.data = node;
+                node = tmpNode;
+            }
+
+            // insert the small tree into the large tree at appropriate level
+            this._insert(node, this.data.height - node.height - 1, true);
+        }
 
         return this;
     },
@@ -289,12 +314,16 @@ rbush.prototype = {
         if (level) {
             insertPath[level - 1].children.push(newNode);
         } else {
-            // split root node
-            this.data = {};
-            this.data.children = [node, newNode];
-            this.data.height = node.height + 1;
-            this._calcBBoxes(this.data);
+            this._splitRoot(node, newNode);
         }
+    },
+
+    _splitRoot: function (node, newNode) {
+        // split root node
+        this.data = {};
+        this.data.children = [node, newNode];
+        this.data.height = node.height + 1;
+        this._calcBBoxes(this.data);
     },
 
     _chooseSplitIndex: function (node, m, M) {
