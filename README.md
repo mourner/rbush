@@ -22,16 +22,17 @@ click to perform search under the cursor.
 
 ## Performance
 
-The following performance test was done by generating random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
+The following sample performance test was done by generating
+random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
 Performed with Node.js on a Retina Macbook Pro mid-2012.
 
-Test                        | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
---------------------------- | ------ | ------
-insert 1M items one by one  | 9.1s   | 13.2s
-bulk load 1M items          | 4.1s   | n/a
-1000 searches of 1% area    | 1.2s   | 7.7s
-1000 searches of 0.01% area | 0.1s   | 4.7s
-remove 10k items one by one | 0.4s   | 38s
+Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
+---------------------------- | ------ | ------
+insert 1M items one by one   | 9.25s  | 13.12s
+bulk load 1M items           | 4.14s  | n/a
+1000 searches of 1% area     | 1.22s  | 7.52s
+1000 searches of 0.01% area  | 0.09s  | 4.21s
+remove 1000 items one by one | 0.04s  | 2.68s
 
 ## Usage
 
@@ -42,12 +43,14 @@ var tree = rbush(9);
 ```
 
 An optional argument to `rbush` defines the maximum number of entries in a tree node.
-It drastically affects the performance, so you should adjust it considering the type of data and search queries you perform.
+It drastically affects the performance, so you should adjust it
+considering the type of data and search queries you perform.
 
 ### Data Format
 
 By default, RBush assumes the format of data points to be `[minX, minY, maxX, maxY]`.
-You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings as a second argument to `rbush` like this:
+You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings
+as a second argument to `rbush` like this:
 
 ```js
 var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
@@ -87,7 +90,8 @@ tree.load([
 ]);
 ```
 
-Bulk loading is usually ~2-3 times faster than inserting items one by one, and subsequent query performance is also slightly better.
+Bulk loading is usually ~2-3 times faster than inserting items one by one,
+and subsequent query performance is also ~20-30% better.
 
 ### Search
 
@@ -112,7 +116,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 ## Algorithms Used
 
-* single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R<sup>*</sup>-tree (split is very effective in JS, while other R<sup>*</sup>-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
+* single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R<sup> * </sup>-tree (split is very effective in JS, while other R<sup> * </sup>-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree algorithm using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
 * bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading)
 * search: standard non-recursive R-tree search
@@ -129,7 +133,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 ## Papers
 
 * [R-trees: a Dynamic Index Structure For Spatial Searching](http://www-db.deis.unibo.it/courses/SI-LS/papers/Gut84.pdf)
-* [The R<sup>*</sup>-tree: An Efficient and Robust Access Method for Points and Rectangles+](http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf)
+* [The R<sup> * </sup>-tree: An Efficient and Robust Access Method for Points and Rectangles+](http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf)
 * [OMT: Overlap Minimizing Top-down Bulk Loading Algorithm for R-tree](http://ftp.informatik.rwth-aachen.de/Publications/CEUR-WS/Vol-74/files/FORUM_18.pdf)
 * [Bulk Insertion for R-trees by Seeded Clustering](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
 * [R-Trees: Theory and Applications (book)](http://metro-natshar-31-71.brain.net.pk/articles/1852339772.pdf)
