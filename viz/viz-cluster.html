@@ -6,6 +6,7 @@
 <button id="insert1">Insert 50000 one by one</button>
 <button id="insert2">Insert 1000 one by one</button>
 <button id="insert3">Insert one</button>
+<button id="remove">Remove leftmost 10000 one by one</button>
 
 <script src="../rbush.js"></script>
 <script src="viz.js"></script>
@@ -52,11 +53,7 @@ function genInsertOneByOne(K) {
 document.getElementById('insert1').onclick = genInsertOneByOne(50000);
 document.getElementById('insert2').onclick = genInsertOneByOne(1000);
 document.getElementById('insert3').onclick = genInsertOneByOne(1);
-
-document.getElementById('canvas').onclick = function (e) {
-    console.time('1 pixel search');
-    tree.search([e.clientX, e.clientY, e.clientX + 1, e.clientY + 1]);
-    console.timeEnd('1 pixel search');
-};
+document.getElementById('canvas').onclick = search;
+document.getElementById('remove').onclick = remove;
 
 </script>

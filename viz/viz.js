@@ -75,3 +75,22 @@ function draw() {
         ctx.strokeRect.apply(ctx, rects[i][2]);
     }
 }
+
+function search(e) {
+    console.time('1 pixel search');
+    tree.search([e.clientX, e.clientY, e.clientX + 1, e.clientY + 1]);
+    console.timeEnd('1 pixel search');
+}
+
+function remove() {
+    data.sort(tree._sortMinX);
+    console.time('remove 10000');
+    for (var i = 0; i < 10000; i++) {
+        tree.remove(data[i]);
+    }
+    console.timeEnd('remove 10000');
+
+    data.splice(0, 10000);
+
+    draw();
+};
