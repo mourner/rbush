@@ -3,7 +3,7 @@ var rbush = typeof require !== 'undefined' ? require('../rbush.js') : rbush;
 var data = [],
     x, y;
 
-var N = 100000,
+var N = 1000000,
     maxFill = 10;
 
 function randBox(size) {
@@ -24,11 +24,11 @@ var tree = rbush(maxFill);
 
 console.log('maxFill: ' + tree._maxEntries);
 
-console.time('load one by one');
+console.time('insert one by one');
 for (i = 0; i < N; i++) {
     tree.insert(data[i]);
 }
-console.timeEnd('load one by one');
+console.timeEnd('insert one by one');
 
 // console.time('bulk load');
 // tree.load(data);
@@ -45,6 +45,12 @@ for (i = 0; i < 1000; i++) {
     tree.search(randBox(1));
 }
 console.timeEnd('1000 searches 0.01%');
+
+console.time('remove 10000 one by one');
+for (i = 0; i < 10000; i++) {
+    tree.remove(data[i]);
+}
+console.timeEnd('remove 10000 one by one');
 
 // var result, bbox;
 
@@ -71,7 +77,7 @@ for (var i = 0; i < N; i++) {
 
 console.time('old RTree load one by one');
 for (var i = 0; i < N; i++) {
-    tree2.insert(data2[i], {});
+    tree2.insert(data2[i], i);
 }
 console.timeEnd('old RTree load one by one');
 
@@ -88,3 +94,9 @@ for (i = 0; i < 1000; i++) {
     tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
 }
 console.timeEnd('1000 searches 0.01% 2');
+
+console.time('old RTree remove 10000 one by one');
+for (var i = 0; i < 10000; i++) {
+    tree2.remove(data2[i], i);
+}
+console.timeEnd('old RTree remove 10000 one by one');
