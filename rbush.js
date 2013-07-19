@@ -14,13 +14,7 @@ function rbush(maxEntries, format) {
         return new rbush(maxEntries, format);
     }
 
-    if (!maxEntries) {
-        // maxEntries is required because it's the most important performance decision when using RBush
-        // and depens on the type of data and search queries you perform
-        throw new Error("Provide a maxEntries argument to rbush constructor");
-    }
-
-    this._maxEntries = Math.max(4, maxEntries);
+    this._maxEntries = Math.max(4, maxEntries || 9);
     this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
 
     // data format (minX, minY, maxX, maxY accessors),
