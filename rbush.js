@@ -31,12 +31,7 @@ function rbush(maxEntries, format) {
 
     this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
 
-    this.data = {
-        children: [],
-        leaf: true,
-        bbox: [Infinity, Infinity, -Infinity, -Infinity],
-        height: 1
-    };
+    this.clear();
 }
 
 rbush.prototype = {
@@ -87,7 +82,12 @@ rbush.prototype = {
     },
 
     clear: function () {
-        delete this.data;
+        this.data = {
+            children: [],
+            leaf: true,
+            bbox: this._infiniteBBox(),
+            height: 1
+        };
         return this;
     },
 
@@ -151,29 +151,33 @@ rbush.prototype = {
         return this;
     },
 
-    _build: function (items, level) {
+    _build: function (items, level, height) {
 
-        var node = {},
-            N = items.length,
+        var N = items.length,
             M = this._maxEntries;
 
         if (N <= M) {
-            node.children = items;
-            node.leaf = true;
-            return node;
+            return {
+                children: items,
+                leaf: true,
+                height: 1
+            };
         }
-
-        node.children = [];
 
         if (!level) {
             // target height of the bulk-loaded tree
-            var H = node.height = Math.ceil(Math.log(N) / Math.log(M));
+            height = Math.ceil(Math.log(N) / Math.log(M));
 
             // target number of root entries to maximize storage utilization
-            M = Math.ceil(N / Math.pow(M, H - 1));
+            M = Math.ceil(N / Math.pow(M, height - 1));
 
             items.sort(this._sortMinX);
         }
+
+        var node = {
+            children: [],
+            height: height
+        };
 
         var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
             N2 = Math.ceil(N / M),
@@ -186,7 +190,7 @@ rbush.prototype = {
 
             for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
                 // pack each entry recursively
-                childNode = this._build(slice.slice(j, j + N2), level + 1);
+                childNode = this._build(slice.slice(j, j + N2), level + 1, height - 1);
                 node.children.push(childNode);
             }
         }
@@ -232,6 +236,7 @@ rbush.prototype = {
     },
 
     _insert: function (item, level, isNode, root) {
+
         var bbox = isNode ? item.bbox : this._toBBox(item),
             insertPath = [];
 
@@ -262,16 +267,17 @@ rbush.prototype = {
     },
 
     _split: function (insertPath, level) {
+
         var node = insertPath[level],
             M = node.children.length,
             m = this._minFill;
 
         this._chooseSplitAxis(node, m, M);
 
-        var k = this._chooseSplitIndex(node, m, M);
-
-        var newNode = {};
-        newNode.children = node.children.splice(k);
+        var newNode = {
+            children: node.children.splice(this._chooseSplitIndex(node, m, M)),
+            height: node.height
+        };
 
         if (node.leaf) {
             newNode.leaf = true;
@@ -287,7 +293,6 @@ rbush.prototype = {
             this.data = {};
             this.data.children = [node, newNode];
             this.data.height = node.height + 1;
-            delete node.height;
             this._calcBBoxes(this.data);
         }
     },
@@ -364,7 +369,7 @@ rbush.prototype = {
     },
 
     _distBBox: function (node, k, p) {
-        var bbox = [Infinity, Infinity, -Infinity, -Infinity];
+        var bbox = this._infiniteBBox();
 
         for (var i = k, child; i < p; i++) {
             child = node.children[i];
@@ -375,8 +380,7 @@ rbush.prototype = {
     },
 
     _calcBBoxes: function (node, recursive) {
-
-        node.bbox = [Infinity, Infinity, -Infinity, -Infinity];
+        node.bbox = this._infiniteBBox();
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
@@ -446,6 +450,10 @@ rbush.prototype = {
             maxY = Math.min(bbox[3], bbox2[3]);
 
         return Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+    },
+
+    _infiniteBBox: function () {
+        return [Infinity, Infinity, -Infinity, -Infinity];
     },
 
     _createSort: function (accessor) {
