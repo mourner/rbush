@@ -98,45 +98,39 @@ rbush.prototype = {
 
         // depth-first iterative tree traversal
         while (node || path.length) {
-            if (node) {
-                if (node.leaf) {
-                    index = node.children.indexOf(item);
 
-                    // item found; remove and condense tree upwards
-                    if (index !== -1) {
-                        node.children.splice(index, 1);
-
-                        path.push(node);
-                        this._condense(path);
-
-                        return true;
-                    }
-                }
-
-                if (!goingUp && !node.leaf && this._intersects(bbox, node.bbox)) {
-                    // go down
-                    path.push(node);
-                    indexes.push(i);
-                    parent = node;
-                    i = 0;
-                    node = node.children[i];
-
-                } else if (parent) {
-                    // go right
-                    i++;
-                    node = parent.children[i];
-                    goingUp = false;
-
-                } else {
-                    // nothing found
-                    node = null;
-                }
-            } else {
-                // go up
+            if (!node) { // go up
                 node = path.pop();
                 parent = path[path.length - 1];
                 i = indexes.pop();
                 goingUp = true;
+            }
+
+            if (node.leaf) { // check current node
+                index = node.children.indexOf(item);
+
+                if (index !== -1) { // item found
+                    node.children.splice(index, 1);
+                    path.push(node);
+                    this._condense(path);
+                    return true;
+                }
+            }
+
+            if (!goingUp && !node.leaf && this._intersects(bbox, node.bbox)) { // go down
+                path.push(node);
+                indexes.push(i);
+                i = 0;
+                parent = node;
+                node = node.children[0];
+
+            } else if (parent) { // go right
+                i++;
+                node = parent.children[i];
+                goingUp = false;
+
+            } else { // nothing found
+                node = null;
             }
         }
 
