@@ -78,9 +78,9 @@ Clear all items:
 tree.clear();
 ```
 
-### Bulk-inserting Data
+### Bulk-Inserting Data
 
-Bulk-insert te given data into the tree:
+Bulk-insert the given data into the tree:
 
 ```js
 tree.load([
