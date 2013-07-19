@@ -68,6 +68,8 @@ rbush.prototype = {
     },
 
     load: function (data) {
+        if (!(data && data.length)) { return this; }
+
         // recursively build the tree with the given data from stratch using OMT algorithm
         this.data = this._build(data.slice(), 0);
 
@@ -78,7 +80,9 @@ rbush.prototype = {
     },
 
     insert: function (item) {
-        this._insert(item);
+        if (item) {
+            this._insert(item);
+        }
         return this;
     },
 
@@ -88,6 +92,8 @@ rbush.prototype = {
     },
 
     remove: function (item) {
+        if (!item) { return this; }
+
         var node = this.data,
             bbox = this._toBBox(item),
             path = [],
