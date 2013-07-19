@@ -53,7 +53,7 @@ You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY`
 as a second argument to `rbush` like this:
 
 ```js
-var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
+var tree = rbush(9, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
 tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
 ```
 
@@ -105,10 +105,10 @@ Returns an array of data items (points or rectangles) that the given bounding bo
 
 ```js
 // export data as JSON object
-tree.toJSON();
+var treeData = tree.toJSON();
 
 // import previously exported data
-var tree = rbush(4).fromJSON(treeData);
+var tree = rbush(9).fromJSON(treeData);
 ```
 
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
@@ -117,7 +117,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 ## Algorithms Used
 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
-* single deletion: non-recursive R-tree algorithm using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
+* single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
 * bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading)
 * search: standard non-recursive R-tree search
 
