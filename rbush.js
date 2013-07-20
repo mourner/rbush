@@ -7,7 +7,7 @@
 (function () { 'use strict';
 
 function rbush(maxEntries, format) {
-    // jshint newcap: false, validthis: true, evil: true
+    // jshint newcap: false, validthis: true
 
     if (!(this instanceof rbush)) {
         // allow constructing RBush trees without "new"
@@ -98,7 +98,7 @@ rbush.prototype = {
         this.data = {
             children: [],
             leaf: true,
-            bbox: this._infiniteBBox(),
+            bbox: this._infinite(),
             height: 1
         };
         return this;
@@ -388,7 +388,7 @@ rbush.prototype = {
 
     // min bounding rectangle of node children from k to p-1
     _distBBox: function (node, k, p) {
-        var bbox = this._infiniteBBox();
+        var bbox = this._infinite();
 
         for (var i = k, child; i < p; i++) {
             child = node.children[i];
@@ -400,7 +400,7 @@ rbush.prototype = {
 
     _calcBBoxes: function (node, recursive) {
         // TODO eliminate recursion
-        node.bbox = this._infiniteBBox();
+        node.bbox = this._infinite();
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
@@ -468,7 +468,7 @@ rbush.prototype = {
                Math.max(0, maxY - minY);
     },
 
-    _infiniteBBox: function () {
+    _infinite: function () {
         return [Infinity, Infinity, -Infinity, -Infinity];
     },
 
@@ -484,6 +484,7 @@ rbush.prototype = {
         this._sortMinX = this._createSort(format[0]);
         this._sortMinY = this._createSort(format[1]);
 
+        // jshint evil: true
         this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
 
         this._sortNodeMinX = this._createSort('.bbox[0]');
