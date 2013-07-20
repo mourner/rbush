@@ -17,19 +17,7 @@ function rbush(maxEntries, format) {
     this._maxEntries = Math.max(4, maxEntries || 9);
     this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
 
-    // data format (minX, minY, maxX, maxY accessors),
-    // uses eval-type function compilation instead of accepting functions to simplify customization;
-    // performance is not affected since this happens only once
-
-    format = format || ['[0]', '[1]', '[2]', '[3]'];
-
-    this._sortMinX = this._createSort(format[0]);
-    this._sortMinY = this._createSort(format[1]);
-
-    this._sortNodeMinX = this._createSort('.bbox[0]');
-    this._sortNodeMinY = this._createSort('.bbox[1]');
-
-    this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+    this._initFormat(format);
 
     this.clear();
 }
@@ -101,7 +89,7 @@ rbush.prototype = {
 
     insert: function (item) {
         if (item) {
-            this._insert(item);
+            this._insert(item, this.data.height - 1);
         }
         return this;
     },
@@ -138,7 +126,8 @@ rbush.prototype = {
             if (node.leaf) { // check current node
                 index = node.children.indexOf(item);
 
-                if (index !== -1) { // item found
+                if (index !== -1) {
+                    // item found, remove the item and condense tree upwards
                     node.children.splice(index, 1);
                     path.push(node);
                     this._condense(path);
@@ -167,7 +156,6 @@ rbush.prototype = {
     },
 
     toJSON: function () {
-        // TODO cleanup nodes from area, enlargement, sqDist properties
         return this.data;
     },
 
@@ -198,6 +186,8 @@ rbush.prototype = {
 
             items.sort(this._sortMinX);
         }
+
+        // TODO eliminate recursion?
 
         var node = {
             children: [],
@@ -269,15 +259,11 @@ rbush.prototype = {
         var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
             splitOccured;
 
-        if (typeof level === 'undefined') {
-            level = insertPath.length - 1;
-        }
-
         // put the item into the node
         node.children.push(item);
         this._extend(node.bbox, bbox);
 
-        // deal with node overflow if it happened
+        // split on node overflow; propagate upwards if necessary
         do {
             splitOccured = false;
             if (insertPath[level].children.length > this._maxEntries) {
@@ -291,6 +277,7 @@ rbush.prototype = {
         this._adjustParentBBoxes(bbox, insertPath, level);
     },
 
+    // split overflowed node into two
     _split: function (insertPath, level) {
 
         var node = insertPath[level],
@@ -358,6 +345,7 @@ rbush.prototype = {
         return index;
     },
 
+    // sorts node children by the best axis for split
     _chooseSplitAxis: function (node, m, M) {
 
         var sortMinX = node.leaf ? this._sortMinX : this._sortNodeMinX,
@@ -373,6 +361,7 @@ rbush.prototype = {
         }
     },
 
+    // total margin of all possible split distributions where each node is at least m full
     _allDistMargin: function (node, m, M, sort) {
 
         node.children.sort(sort);
@@ -397,6 +386,7 @@ rbush.prototype = {
         return margin;
     },
 
+    // min bounding rectangle of node children from k to p-1
     _distBBox: function (node, k, p) {
         var bbox = this._infiniteBBox();
 
@@ -409,6 +399,7 @@ rbush.prototype = {
     },
 
     _calcBBoxes: function (node, recursive) {
+        // TODO eliminate recursion
         node.bbox = this._infiniteBBox();
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
@@ -444,45 +435,59 @@ rbush.prototype = {
         }
     },
 
-    _intersects: function (bbox, bbox2) {
-        return bbox2[0] <= bbox[2] &&
-               bbox2[1] <= bbox[3] &&
-               bbox2[2] >= bbox[0] &&
-               bbox2[3] >= bbox[1];
+    _intersects: function (a, b) {
+        return b[0] <= a[2] &&
+               b[1] <= a[3] &&
+               b[2] >= a[0] &&
+               b[3] >= a[1];
     },
 
-    _extend: function (bbox, bbox2) {
-        bbox[0] = Math.min(bbox[0], bbox2[0]);
-        bbox[1] = Math.min(bbox[1], bbox2[1]);
-        bbox[2] = Math.max(bbox[2], bbox2[2]);
-        bbox[3] = Math.max(bbox[3], bbox2[3]);
-        return bbox;
+    _extend: function (a, b) {
+        a[0] = Math.min(a[0], b[0]);
+        a[1] = Math.min(a[1], b[1]);
+        a[2] = Math.max(a[2], b[2]);
+        a[3] = Math.max(a[3], b[3]);
+        return a;
     },
 
-    _area: function (bbox) {
-        return (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]);
+    _area:   function (a) { return (a[2] - a[0]) * (a[3] - a[1]); },
+    _margin: function (a) { return (a[2] - a[0]) + (a[3] - a[1]); },
+
+    _enlargedArea: function (a, b) {
+        return (Math.max(b[2], a[2]) - Math.min(b[0], a[0])) *
+               (Math.max(b[3], a[3]) - Math.min(b[1], a[1]));
     },
 
-    _margin: function (bbox) {
-        return (bbox[2] - bbox[0]) + (bbox[3] - bbox[1]);
-    },
+    _intersectionArea: function (a, b) {
+        var minX = Math.max(a[0], b[0]),
+            minY = Math.max(a[1], b[1]),
+            maxX = Math.min(a[2], b[2]),
+            maxY = Math.min(a[3], b[3]);
 
-    _enlargedArea: function (bbox, bbox2) {
-        return (Math.max(bbox2[2], bbox[2]) - Math.min(bbox2[0], bbox[0])) *
-               (Math.max(bbox2[3], bbox[3]) - Math.min(bbox2[1], bbox[1]));
-    },
-
-    _intersectionArea: function (bbox, bbox2) {
-        var minX = Math.max(bbox[0], bbox2[0]),
-            maxX = Math.min(bbox[2], bbox2[2]),
-            minY = Math.max(bbox[1], bbox2[1]),
-            maxY = Math.min(bbox[3], bbox2[3]);
-
-        return Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
+        return Math.max(0, maxX - minX) *
+               Math.max(0, maxY - minY);
     },
 
     _infiniteBBox: function () {
         return [Infinity, Infinity, -Infinity, -Infinity];
+    },
+
+    _initFormat: function (format) {
+
+        // data format (minX, minY, maxX, maxY accessors)
+        format = format || ['[0]', '[1]', '[2]', '[3]'];
+
+        // uses eval-type function compilation instead of just accepting a toBBox function
+        // because the algorithms are very sensitive to sorting functions performance,
+        // so they should be dead simple and without inner calls
+
+        this._sortMinX = this._createSort(format[0]);
+        this._sortMinY = this._createSort(format[1]);
+
+        this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+
+        this._sortNodeMinX = this._createSort('.bbox[0]');
+        this._sortNodeMinY = this._createSort('.bbox[1]');
     },
 
     _createSort: function (accessor) {
