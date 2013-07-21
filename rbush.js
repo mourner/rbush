@@ -15,7 +15,7 @@ function rbush(maxEntries, format) {
     }
 
     this._maxEntries = Math.max(4, maxEntries || 9);
-    this._minFill = Math.max(2, Math.floor(this._maxEntries * 0.4));
+    this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
 
     this._initFormat(format);
 
@@ -53,7 +53,7 @@ rbush.prototype = {
     load: function (data) {
         if (!(data && data.length)) { return this; }
 
-        if (data.length < this._minFill) {
+        if (data.length < this._minEntries) {
             for (var i = 0, len = data.length; i < len; i++) {
                 this.insert(data[i]);
             }
@@ -282,7 +282,7 @@ rbush.prototype = {
 
         var node = insertPath[level],
             M = node.children.length,
-            m = this._minFill;
+            m = this._minEntries;
 
         this._chooseSplitAxis(node, m, M);
 
