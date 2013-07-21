@@ -8,9 +8,7 @@
 
 function rbush(maxEntries, format) {
 
-    // allow constructing RBush trees without "new"
     // jshint newcap: false, validthis: true
-
     if (!(this instanceof rbush)) { return new rbush(maxEntries, format); }
 
     this._maxEntries = Math.max(4, maxEntries || 9);
