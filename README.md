@@ -27,13 +27,13 @@ random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` 
 (see `debug/perf.js` script).
 Performed with Node.js on a Retina Macbook Pro 15 (mid-2012).
 
-Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
----------------------------- | ------ | ------
-insert 1M items one by one   | 9.1s   | 14.89s
-1000 searches of 1% area     | 1.1s   | 5.05s
-1000 searches of 0.01% area  | 0.1s   | 2.56s
-remove 1000 items one by one | 0.05s  | 3.66s
-bulk insert 1M items         | 3.74s  | n/a
+Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
+---------------------------- | ------ | ------ | ----
+insert 1M items one by one   | 9.1s   | 14.89s | 1.6x
+1000 searches of 1% area     | 1.1s   | 5.05s  | 4.6x
+1000 searches of 0.01% area  | 0.1s   | 2.56s  | 25x
+remove 1000 items one by one | 0.05s  | 3.66s  | 73x
+bulk insert 1M items         | 3.74s  | n/a    | 4x
 
 ## Usage
 
