@@ -7,12 +7,11 @@
 (function () { 'use strict';
 
 function rbush(maxEntries, format) {
+
+    // allow constructing RBush trees without "new"
     // jshint newcap: false, validthis: true
 
-    if (!(this instanceof rbush)) {
-        // allow constructing RBush trees without "new"
-        return new rbush(maxEntries, format);
-    }
+    if (!(this instanceof rbush)) { return new rbush(maxEntries, format); }
 
     this._maxEntries = Math.max(4, maxEntries || 9);
     this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
@@ -29,7 +28,7 @@ rbush.prototype = {
         var node = this.data,
             result = [];
 
-        if (!node || !this._intersects(bbox, node.bbox)) { return result; }
+        if (!this._intersects(bbox, node.bbox)) { return result; }
 
         var nodesToSearch = [],
             i, len, child, childBBox;
@@ -74,7 +73,7 @@ rbush.prototype = {
 
         } else {
             if (this.data.height < node.height) {
-                // swap trees if loaded one is bigger
+                // swap trees if inserted one is bigger
                 var tmpNode = this.data;
                 this.data = node;
                 node = tmpNode;
@@ -155,9 +154,7 @@ rbush.prototype = {
         return this;
     },
 
-    toJSON: function () {
-        return this.data;
-    },
+    toJSON: function () { return this.data; },
 
     fromJSON: function (data) {
         this.data = data;
@@ -255,7 +252,7 @@ rbush.prototype = {
         var bbox = isNode ? item.bbox : this._toBBox(item),
             insertPath = [];
 
-        // recursively find the best node for accommodating the item, saving all nodes along the path too
+        // find the best node for accommodating the item, saving all nodes along the path too
         var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
             splitOccured;
 
@@ -468,15 +465,12 @@ rbush.prototype = {
                Math.max(0, maxY - minY);
     },
 
-    _infinite: function () {
-        return [Infinity, Infinity, -Infinity, -Infinity];
-    },
+    _infinite: function () { return [Infinity, Infinity, -Infinity, -Infinity]; },
 
     _compareNodeMinX: function (a, b) { return a.bbox[0] - b.bbox[0]; },
     _compareNodeMinY: function (a, b) { return a.bbox[1] - b.bbox[1]; },
 
     _initFormat: function (format) {
-
         // data format (minX, minY, maxX, maxY accessors)
         format = format || ['[0]', '[1]', '[2]', '[3]'];
 
