@@ -184,7 +184,7 @@ rbush.prototype = {
             // target number of root entries to maximize storage utilization
             M = Math.ceil(N / Math.pow(M, height - 1));
 
-            items.sort(this._sortMinX);
+            items.sort(this._compareMinX);
         }
 
         // TODO eliminate recursion?
@@ -196,12 +196,12 @@ rbush.prototype = {
 
         var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
             N2 = Math.ceil(N / M),
-            sortFn = level % 2 === 1 ? this._sortMinX : this._sortMinY,
+            compare = level % 2 === 1 ? this._compareMinX : this._compareMinY,
             i, j, slice, sliceLen, childNode;
 
         // split the items into M mostly square tiles
         for (i = 0; i < N; i += N1) {
-            slice = items.slice(i, i + N1).sort(sortFn);
+            slice = items.slice(i, i + N1).sort(compare);
 
             for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
                 // pack each entry recursively
@@ -348,23 +348,23 @@ rbush.prototype = {
     // sorts node children by the best axis for split
     _chooseSplitAxis: function (node, m, M) {
 
-        var sortMinX = node.leaf ? this._sortMinX : this._sortNodeMinX,
-            sortMinY = node.leaf ? this._sortMinY : this._sortNodeMinY,
-            xMargin = this._allDistMargin(node, m, M, sortMinX),
-            yMargin = this._allDistMargin(node, m, M, sortMinY);
+        var compareMinX = node.leaf ? this._compareMinX : this._compareNodeMinX,
+            compareMinY = node.leaf ? this._compareMinY : this._compareNodeMinY,
+            xMargin = this._allDistMargin(node, m, M, compareMinX),
+            yMargin = this._allDistMargin(node, m, M, compareMinY);
 
         // if total distributions margin value is minimal for x, sort by minX,
         // otherwise it's already sorted by minY
 
         if (xMargin < yMargin) {
-            node.children.sort(sortMinX);
+            node.children.sort(compareMinX);
         }
     },
 
     // total margin of all possible split distributions where each node is at least m full
-    _allDistMargin: function (node, m, M, sort) {
+    _allDistMargin: function (node, m, M, compare) {
 
-        node.children.sort(sort);
+        node.children.sort(compare);
 
         var leftBBox = this._distBBox(node, 0, m),
             rightBBox = this._distBBox(node, M - m, M),
@@ -472,6 +472,9 @@ rbush.prototype = {
         return [Infinity, Infinity, -Infinity, -Infinity];
     },
 
+    _compareNodeMinX: function (a, b) { return a.bbox[0] - b.bbox[0]; },
+    _compareNodeMinY: function (a, b) { return a.bbox[1] - b.bbox[1]; },
+
     _initFormat: function (format) {
 
         // data format (minX, minY, maxX, maxY accessors)
@@ -481,19 +484,14 @@ rbush.prototype = {
         // because the algorithms are very sensitive to sorting functions performance,
         // so they should be dead simple and without inner calls
 
-        this._sortMinX = this._createSort(format[0]);
-        this._sortMinY = this._createSort(format[1]);
-
         // jshint evil: true
+
+        var compareArr = ['return a', ' - b', ';'];
+
+        this._compareMinX = new Function('a', 'b', compareArr.join(format[0]));
+        this._compareMinY = new Function('a', 'b', compareArr.join(format[1]));
+
         this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
-
-        this._sortNodeMinX = this._createSort('.bbox[0]');
-        this._sortNodeMinY = this._createSort('.bbox[1]');
-    },
-
-    _createSort: function (accessor) {
-        // jshint evil: true
-        return new Function('a', 'b', 'return a' + accessor + ' > b' + accessor + ' ? 1 : -1;');
     }
 };
 
