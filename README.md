@@ -23,16 +23,17 @@ click to perform search under the cursor.
 ## Performance
 
 The following sample performance test was done by generating
-random uniformly distributed rectangles of ~0.01% area (see `debug/perf.js` script).
+random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
+(see `debug/perf.js` script).
 Performed with Node.js on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree)
 ---------------------------- | ------ | ------
-insert 1M items one by one   | 9.25s  | 13.12s
-1000 searches of 1% area     | 1.22s  | 7.52s
-1000 searches of 0.01% area  | 0.09s  | 4.21s
-remove 1000 items one by one | 0.04s  | 2.68s
-bulk insert 1M items         | 3.9s   | n/a
+insert 1M items one by one   | 9.1s   | 14.89s
+1000 searches of 1% area     | 1.1s   | 5.05s
+1000 searches of 0.01% area  | 0.1s   | 2.56s
+remove 1000 items one by one | 0.05s  | 3.66s
+bulk insert 1M items         | 3.74s  | n/a
 
 ## Usage
 
