@@ -95,7 +95,7 @@ rbush.prototype = {
         this.data = {
             children: [],
             leaf: true,
-            bbox: this._infinite(),
+            bbox: this._empty(),
             height: 1
         };
         return this;
@@ -383,7 +383,7 @@ rbush.prototype = {
 
     // min bounding rectangle of node children from k to p-1
     _distBBox: function (node, k, p) {
-        var bbox = this._infinite();
+        var bbox = this._empty();
 
         for (var i = k, child; i < p; i++) {
             child = node.children[i];
@@ -395,7 +395,7 @@ rbush.prototype = {
 
     _calcBBoxes: function (node, recursive) {
         // TODO eliminate recursion
-        node.bbox = this._infinite();
+        node.bbox = this._empty();
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
@@ -463,7 +463,7 @@ rbush.prototype = {
                Math.max(0, maxY - minY);
     },
 
-    _infinite: function () { return [Infinity, Infinity, -Infinity, -Infinity]; },
+    _empty: function () { return [Infinity, Infinity, -Infinity, -Infinity]; },
 
     _compareNodeMinX: function (a, b) { return a.bbox[0] - b.bbox[0]; },
     _compareNodeMinY: function (a, b) { return a.bbox[1] - b.bbox[1]; },
