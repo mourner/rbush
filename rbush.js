@@ -59,7 +59,6 @@ rbush.prototype = {
 
         // recursively build the tree with the given data from stratch using OMT algorithm
         var node = this._build(data.slice(), 0);
-        this._calcBBoxes(node, true);
 
         if (!this.data.children.length) {
             // save as is if tree is empty
@@ -162,14 +161,17 @@ rbush.prototype = {
     _build: function (items, level, height) {
 
         var N = items.length,
-            M = this._maxEntries;
+            M = this._maxEntries,
+            node;
 
         if (N <= M) {
-            return {
+            node = {
                 children: items,
                 leaf: true,
                 height: 1
             };
+            this._calcBBox(node);
+            return node;
         }
 
         if (!level) {
@@ -184,7 +186,7 @@ rbush.prototype = {
 
         // TODO eliminate recursion?
 
-        var node = {
+        node = {
             children: [],
             height: height
         };
@@ -204,6 +206,8 @@ rbush.prototype = {
                 node.children.push(childNode);
             }
         }
+
+        this._calcBBox(node);
 
         return node;
     },
@@ -290,8 +294,8 @@ rbush.prototype = {
             newNode.leaf = true;
         }
 
-        this._calcBBoxes(node);
-        this._calcBBoxes(newNode);
+        this._calcBBox(node);
+        this._calcBBox(newNode);
 
         if (level) {
             insertPath[level - 1].children.push(newNode);
@@ -305,7 +309,7 @@ rbush.prototype = {
         this.data = {};
         this.data.children = [node, newNode];
         this.data.height = node.height + 1;
-        this._calcBBoxes(this.data);
+        this._calcBBox(this.data);
     },
 
     _chooseSplitIndex: function (node, m, M) {
@@ -393,21 +397,13 @@ rbush.prototype = {
         return bbox;
     },
 
-    _calcBBoxes: function (node, recursive) {
-        // TODO eliminate recursion
+    // calculate node's bbox from bboxes of its children
+    _calcBBox: function (node) {
         node.bbox = this._empty();
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
-
-            if (node.leaf) {
-                this._extend(node.bbox, this._toBBox(child));
-            } else {
-                if (recursive) {
-                    this._calcBBoxes(child, recursive);
-                }
-                this._extend(node.bbox, child.bbox);
-            }
+            this._extend(node.bbox, node.leaf ? this._toBBox(child) : child.bbox);
         }
     },
 
@@ -425,7 +421,7 @@ rbush.prototype = {
                 parent = path[i - 1].children;
                 parent.splice(parent.indexOf(path[i]), 1);
             } else {
-                this._calcBBoxes(path[i]);
+                this._calcBBox(path[i]);
             }
         }
     },
