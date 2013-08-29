@@ -483,7 +483,11 @@ rbush.prototype = {
     }
 };
 
-if (typeof module !== 'undefined') {
+if (typeof define === 'function' && define.amd) {
+    define(function() {
+        return rbush;
+    });
+} else if (typeof module !== 'undefined') {
     module.exports = rbush;
 } else {
     window.rbush = rbush;
