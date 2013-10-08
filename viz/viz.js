@@ -83,7 +83,7 @@ function search(e) {
 }
 
 function remove() {
-    data.sort(tree._sortMinX);
+    data.sort(tree._compareMinX);
     console.time('remove 10000');
     for (var i = 0; i < 10000; i++) {
         tree.remove(data[i]);
