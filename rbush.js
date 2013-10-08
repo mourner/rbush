@@ -11,6 +11,7 @@ function rbush(maxEntries, format) {
     // jshint newcap: false, validthis: true
     if (!(this instanceof rbush)) { return new rbush(maxEntries, format); }
 
+    // max entries in a node is 9 by default; min node fill is 40% for best performance
     this._maxEntries = Math.max(4, maxEntries || 9);
     this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
 
