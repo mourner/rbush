@@ -491,7 +491,7 @@ if (typeof define === 'function' && define.amd) {
 } else if (typeof module !== 'undefined') {
     module.exports = rbush;
 } else {
-    self.rbush = rbush;
+    this.rbush = rbush;
 }
 
 })();
