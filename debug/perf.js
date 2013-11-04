@@ -34,6 +34,12 @@ console.timeEnd('insert one by one');
 // tree.load(data);
 // console.timeEnd('bulk load');
 
+console.time('1000 searches 10%');
+for (i = 0; i < 1000; i++) {
+    tree.search(randBox(100 * Math.sqrt(0.1)));
+}
+console.timeEnd('1000 searches 10%');
+
 console.time('1000 searches 1%');
 for (i = 0; i < 1000; i++) {
     tree.search(randBox(10));
@@ -102,6 +108,13 @@ for (var i = 0; i < N; i++) {
     tree2.insert(data2[i], i);
 }
 console.timeEnd('old RTree load one by one');
+
+console.time('1000 searches 10% 2');
+for (i = 0; i < 1000; i++) {
+    bbox = randBox(100 * Math.sqrt(0.1));
+    tree2.search({x: bbox[0], y: bbox[1], w: bbox[2] - bbox[0], h: bbox[3] - bbox[1]});
+}
+console.timeEnd('1000 searches 10% 2');
 
 console.time('1000 searches 1% 2');
 for (i = 0; i < 1000; i++) {
