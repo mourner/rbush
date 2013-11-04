@@ -22,6 +22,10 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
+    all: function () {
+        return this._all(this.data, []);
+    },
+
     search: function (bbox) {
 
         var node = this.data,
@@ -157,6 +161,19 @@ rbush.prototype = {
     fromJSON: function (data) {
         this.data = data;
         return this;
+    },
+
+    _all: function (node, result) {
+        var nodesToSearch = [];
+        while (node) {
+            if (node.leaf) {
+                result.push.apply(result, node.children);
+            } else {
+                nodesToSearch.push.apply(nodesToSearch, node.children);
+            }
+            node = nodesToSearch.pop();
+        }
+        return result;
     },
 
     _build: function (items, level, height) {
