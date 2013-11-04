@@ -42,7 +42,15 @@ rbush.prototype = {
                 childBBox = node.leaf ? this._toBBox(child) : child.bbox;
 
                 if (this._intersects(bbox, childBBox)) {
-                    (node.leaf ? result : nodesToSearch).push(child);
+                    if (this._contains(bbox, childBBox)) {
+                        if (node.leaf) {
+                            result.push(child);
+                        } else {
+                            this._all(node, result);
+                        }
+                    } else {
+                        (node.leaf ? result : nodesToSearch).push(child);
+                    }
                 }
             }
 
