@@ -1,6 +1,6 @@
 {
   "name": "rbush",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "High-performance 2D spatial index for rectangles (based on R*-tree with bulk loading and bulk insertion algorithms)",
   "homepage": "https://github.com/mourner/rbush",
   "keywords": [
