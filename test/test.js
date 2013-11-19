@@ -36,9 +36,28 @@ describe('rbush', function () {
     describe('constructor', function () {
         it('accepts a format argument to customize the data format', function () {
 
+            var tree = rbush(4, ['minLng', 'minLat', 'maxLng', 'maxLat']);
+            assert.deepEqual(tree._toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+        });
+
+        it('accepts numeric property accessors', function () {
+
+            var tree = rbush(4, [0, 2, 1, 3]);
+            assert.deepEqual(tree._toBBox([-180, 180, -90, 90]), [-180, -90, 180, 90]);
+        });
+
+        it('accepts a dot prefixed property names', function () {
+
             var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
             assert.deepEqual(tree._toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
         });
+
+        it('accepts bracket wrapped property names', function () {
+
+            var tree = rbush(4, ['[0]', '[2]', '[1]', '[3]']);
+            assert.deepEqual(tree._toBBox([-180, 180, -90, 90]), [-180, -90, 180, 90]);
+        });
+
     });
 
     describe('load', function () {

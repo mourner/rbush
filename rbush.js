@@ -471,20 +471,34 @@ rbush.prototype = {
 
     _initFormat: function (format) {
         // data format (minX, minY, maxX, maxY accessors)
-        format = format || ['[0]', '[1]', '[2]', '[3]'];
+        if (format) {
+            // support old style of providing `.foo` or `[0]` accessors
+            var reg = /^[\.\[]?(.*?)\]?$/,
+                i;
 
-        // uses eval-type function compilation instead of just accepting a toBBox function
-        // because the algorithms are very sensitive to sorting functions performance,
-        // so they should be dead simple and without inner calls
+            for (i = 0; i < 4; ++i) {
+                format[i] = format[i].toString().replace(reg, '$1');
+            }
+        } else {
+            format = [0, 1, 2, 3];
+        }
 
-        // jshint evil: true
+        var minXProp = format[0],
+            minYProp = format[1],
+            maxXProp = format[2],
+            maxYProp = format[3];
 
-        var compareArr = ['return a', ' - b', ';'];
+        this._compareMinX = function (a, b) {
+            return a[minXProp] - b[minXProp];
+        };
 
-        this._compareMinX = new Function('a', 'b', compareArr.join(format[0]));
-        this._compareMinY = new Function('a', 'b', compareArr.join(format[1]));
+        this._compareMinY = function (a, b) {
+            return a[minYProp] - b[minYProp];
+        };
 
-        this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+        this._toBBox = function (a) {
+            return [a[minXProp], a[minYProp], a[maxXProp], a[maxYProp]];
+        };
     }
 };
 
