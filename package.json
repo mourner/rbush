@@ -21,6 +21,6 @@
     "mocha": "~1.13.0"
   },
   "scripts": {
-    "test": "./node_modules/.bin/mocha"
+    "test": "mocha"
   }
 }
