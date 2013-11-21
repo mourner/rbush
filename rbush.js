@@ -49,7 +49,7 @@ rbush.prototype = {
                         result.push(child);
 
                     } else if (this._contains(bbox, childBBox)) {
-                        this._all(node, result);
+                        this._all(child, result);
 
                     } else {
                         nodesToSearch.push(child);
