@@ -135,3 +135,17 @@ e.g. first indexing the data on the server and and then importing the resulting 
 * [OMT: Overlap Minimizing Top-down Bulk Loading Algorithm for R-tree](http://ftp.informatik.rwth-aachen.de/Publications/CEUR-WS/Vol-74/files/FORUM_18.pdf)
 * [Bulk Insertions into R-Trees Using the Small-Tree-Large-Tree Approach](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
 * [R-Trees: Theory and Applications (book)](http://metro-natshar-31-71.brain.net.pk/articles/1852339772.pdf)
+
+## Development
+
+Install to get package dependencies:
+
+    npm install
+
+Run the tests:
+
+    npm test
+
+Run the performance benchmarks:
+
+    npm run perf
