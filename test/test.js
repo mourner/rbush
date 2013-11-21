@@ -37,7 +37,64 @@ describe('rbush', function () {
         it('accepts a format argument to customize the data format', function () {
 
             var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
-            assert.deepEqual(tree._toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+            assert.deepEqual(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+        });
+    });
+
+    describe('override toBBox, compareMinX, compareMinY', function () {
+        it('allows custom data structures to be transformed', function () {
+
+            var tree = rbush(4);
+            tree.toBBox = function (item) {
+                return [item.minLng, item.minLat, item.maxLng, item.maxLat];
+            };
+            tree.compareMinX = function (a, b) {
+                return a.minLng - b.minLng;
+            };
+            tree.compareMinY = function (a, b) {
+                return a.minLat - b.minLat;
+            };
+
+            var data = [
+                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
+                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
+                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+                {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
+            ];
+
+            tree.load(data);
+
+            function byLngLat (a, b) {
+                return a.minLng - b.minLng || a.minLat - b.minLat;
+            }
+
+            assert.deepEqual(tree.search([-180, -90, 180, 90]).sort(byLngLat), [
+                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
+                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
+                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+                {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
+            ].sort(byLngLat));
+
+            assert.deepEqual(tree.search([-180, -90, 0, 90]).sort(byLngLat), [
+                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
+                {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
+            ].sort(byLngLat));
+
+            assert.deepEqual(tree.search([0, -90, 180, 90]).sort(byLngLat), [
+                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
+                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45}
+            ].sort(byLngLat));
+
+            assert.deepEqual(tree.search([-180, 0, 180, 90]).sort(byLngLat), [
+                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
+                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55}
+            ].sort(byLngLat));
+
+            assert.deepEqual(tree.search([-180, -90, 180, 0]).sort(byLngLat), [
+                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+                {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
+            ].sort(byLngLat));
+
         });
     });
 
