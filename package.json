@@ -20,11 +20,13 @@
   "devDependencies": {
     "mocha": "~1.14.0",
     "rtree": "~1.2.3",
-    "jshint": "~2.3.0"
+    "jshint": "~2.3.0",
+    "istanbul": "~0.1.45"
   },
   "scripts": {
     "test": "jshint rbush.js test/test.js && mocha",
-    "perf": "node ./debug/perf.js"
+    "perf": "node ./debug/perf.js",
+    "cov": "istanbul cover _mocha"
   },
   "jshintConfig": {
     "quotmark": "single",

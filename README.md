@@ -141,17 +141,13 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 [![Build Status](https://travis-ci.org/mourner/rbush.png?branch=master)](https://travis-ci.org/mourner/rbush)
 
-Install package dependencies:
+```bash
+npm install  # install dependencies
 
-    npm install
-
-Check the code with JSHint and run the tests:
-
-    npm test
-
-Run the performance benchmarks:
-
-    npm run perf
+npm test     # check the code with JSHint and run the tests
+npm run perf # run the performance benchmarks
+npm run cov  # generate test coverage report (coverage/lcov-report/index.html)
+```
 
 ## Changelog
 
