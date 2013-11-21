@@ -139,11 +139,13 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 ## Development
 
-Install to get package dependencies:
+[![Build Status](https://travis-ci.org/mourner/rbush.png?branch=master)](https://travis-ci.org/mourner/rbush)
+
+Install package dependencies:
 
     npm install
 
-Run the tests:
+Check the code with JSHint and run the tests:
 
     npm test
 
