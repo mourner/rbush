@@ -15,7 +15,9 @@ function rbush(maxEntries, format) {
     this._maxEntries = Math.max(4, maxEntries || 9);
     this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
 
-    this._initFormat(format);
+    if (format) {
+        this._initFormat(format);
+    }
 
     this.clear();
 }
@@ -35,7 +37,7 @@ rbush.prototype = {
         while (node) {
             for (i = 0, len = node.children.length; i < len; i++) {
                 child = node.children[i];
-                childBBox = node.leaf ? this._toBBox(child) : child.bbox;
+                childBBox = node.leaf ? this.toBBox(child) : child.bbox;
 
                 if (this._intersects(bbox, childBBox)) {
                     (node.leaf ? result : nodesToSearch).push(child);
@@ -105,7 +107,7 @@ rbush.prototype = {
         if (!item) { return this; }
 
         var node = this.data,
-            bbox = this._toBBox(item),
+            bbox = this.toBBox(item),
             path = [],
             indexes = [],
             i, parent, index, goingUp;
@@ -152,6 +154,12 @@ rbush.prototype = {
         return this;
     },
 
+    toBBox: function (item) { return item; },
+
+    compareMinX: function (a, b) { return a[0] - b[0]; },
+
+    compareMinY: function (a, b) { return a[1] - b[1]; },
+
     toJSON: function () { return this.data; },
 
     fromJSON: function (data) {
@@ -182,7 +190,7 @@ rbush.prototype = {
             // target number of root entries to maximize storage utilization
             M = Math.ceil(N / Math.pow(M, height - 1));
 
-            items.sort(this._compareMinX);
+            items.sort(this.compareMinX);
         }
 
         // TODO eliminate recursion?
@@ -194,7 +202,7 @@ rbush.prototype = {
 
         var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
             N2 = Math.ceil(N / M),
-            compare = level % 2 === 1 ? this._compareMinX : this._compareMinY,
+            compare = level % 2 === 1 ? this.compareMinX : this.compareMinY,
             i, j, slice, sliceLen, childNode;
 
         // split the items into M mostly square tiles
@@ -252,7 +260,7 @@ rbush.prototype = {
 
     _insert: function (item, level, isNode, root) {
 
-        var bbox = isNode ? item.bbox : this._toBBox(item),
+        var bbox = isNode ? item.bbox : this.toBBox(item),
             insertPath = [];
 
         // find the best node for accommodating the item, saving all nodes along the path too
@@ -348,8 +356,8 @@ rbush.prototype = {
     // sorts node children by the best axis for split
     _chooseSplitAxis: function (node, m, M) {
 
-        var compareMinX = node.leaf ? this._compareMinX : this._compareNodeMinX,
-            compareMinY = node.leaf ? this._compareMinY : this._compareNodeMinY,
+        var compareMinX = node.leaf ? this.compareMinX : this._compareNodeMinX,
+            compareMinY = node.leaf ? this.compareMinY : this._compareNodeMinY,
             xMargin = this._allDistMargin(node, m, M, compareMinX),
             yMargin = this._allDistMargin(node, m, M, compareMinY);
 
@@ -373,13 +381,13 @@ rbush.prototype = {
 
         for (i = m; i < M - m; i++) {
             child = node.children[i];
-            this._extend(leftBBox, node.leaf ? this._toBBox(child) : child.bbox);
+            this._extend(leftBBox, node.leaf ? this.toBBox(child) : child.bbox);
             margin += this._margin(leftBBox);
         }
 
         for (i = M - m - 1; i >= 0; i--) {
             child = node.children[i];
-            this._extend(rightBBox, node.leaf ? this._toBBox(child) : child.bbox);
+            this._extend(rightBBox, node.leaf ? this.toBBox(child) : child.bbox);
             margin += this._margin(rightBBox);
         }
 
@@ -392,7 +400,7 @@ rbush.prototype = {
 
         for (var i = k, child; i < p; i++) {
             child = node.children[i];
-            this._extend(bbox, node.leaf ? this._toBBox(child) : child.bbox);
+            this._extend(bbox, node.leaf ? this.toBBox(child) : child.bbox);
         }
 
         return bbox;
@@ -404,7 +412,7 @@ rbush.prototype = {
 
         for (var i = 0, len = node.children.length, child; i < len; i++) {
             child = node.children[i];
-            this._extend(node.bbox, node.leaf ? this._toBBox(child) : child.bbox);
+            this._extend(node.bbox, node.leaf ? this.toBBox(child) : child.bbox);
         }
     },
 
@@ -471,7 +479,6 @@ rbush.prototype = {
 
     _initFormat: function (format) {
         // data format (minX, minY, maxX, maxY accessors)
-        format = format || ['[0]', '[1]', '[2]', '[3]'];
 
         // uses eval-type function compilation instead of just accepting a toBBox function
         // because the algorithms are very sensitive to sorting functions performance,
@@ -481,10 +488,10 @@ rbush.prototype = {
 
         var compareArr = ['return a', ' - b', ';'];
 
-        this._compareMinX = new Function('a', 'b', compareArr.join(format[0]));
-        this._compareMinY = new Function('a', 'b', compareArr.join(format[1]));
+        this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
+        this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
 
-        this._toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+        this.toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
     }
 };
 
