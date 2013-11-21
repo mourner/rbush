@@ -22,7 +22,12 @@
     "rtree": "~1.2.3"
   },
   "scripts": {
-    "test": "mocha",
+    "test": "jshint rbush.js test/test.js && mocha",
     "perf": "node ./debug/perf.js"
+  },
+  "jshintConfig": {
+    "quotmark": "single",
+    "strict": true,
+    "trailing": true
   }
 }
