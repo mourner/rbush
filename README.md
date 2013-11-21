@@ -159,22 +159,11 @@ Run the performance benchmarks:
 - Added `all` method for getting all of the tree items. [#11](https://github.com/mourner/rbush/pull/11)
 - Made `toBBox`, `compareMinX`, `compareMinY` methods public, made it possible to avoid Content Security Policy issues by overriding them for custom format. [#14](https://github.com/mourner/rbush/pull/14) [#12](https://github.com/mourner/rbush/pull/12)
 
-### 1.2.5 (05.11.13)
-
-- Fixed a bug where insertion failed on a tree that had all items removed previously. [#10](https://github.com/mourner/rbush/issues/10)
-
-### 1.2.4 (25.10.13)
-
-- Added Web Workers support. [#9](https://github.com/mourner/rbush/pull/9)
-
-### 1.2.3 (30.08.13)
-
-- Added AMD support. [#8](https://github.com/mourner/rbush/pull/8)
-
-### 1.2.2 (27.08.13)
-
-- Eliminated recursion when recalculating node bboxes (on insert, remove, load).
+**1.2.5 (05.11.13):** Fixed a bug where insertion failed on a tree that had all items removed previously. [#10](https://github.com/mourner/rbush/issues/10)<br>
+**1.2.4 (25.10.13):** Added Web Workers support. [#9](https://github.com/mourner/rbush/pull/9)<br>
+**1.2.3 (30.08.13):** Added AMD support. [#8](https://github.com/mourner/rbush/pull/8)<br>
+**1.2.2 (27.08.13):** Eliminated recursion when recalculating node bboxes (on insert, remove, load).
 
 ### 1.2 (19.07.13)
 
-- First fully functional RBush release.
+First fully functional RBush release.
