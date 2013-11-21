@@ -19,7 +19,8 @@
   "main": "rbush.js",
   "devDependencies": {
     "mocha": "~1.14.0",
-    "rtree": "~1.2.3"
+    "rtree": "~1.2.3",
+    "jshint": "~2.3.0"
   },
   "scripts": {
     "test": "jshint rbush.js test/test.js && mocha",
