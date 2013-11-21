@@ -24,6 +24,10 @@ function rbush(maxEntries, format) {
 
 rbush.prototype = {
 
+    all: function () {
+        return this._all(this.data, []);
+    },
+
     search: function (bbox) {
 
         var node = this.data,
@@ -40,7 +44,15 @@ rbush.prototype = {
                 childBBox = node.leaf ? this.toBBox(child) : child.bbox;
 
                 if (this._intersects(bbox, childBBox)) {
-                    (node.leaf ? result : nodesToSearch).push(child);
+                    if (this._contains(bbox, childBBox)) {
+                        if (node.leaf) {
+                            result.push(child);
+                        } else {
+                            this._all(node, result);
+                        }
+                    } else {
+                        (node.leaf ? result : nodesToSearch).push(child);
+                    }
                 }
             }
 
@@ -165,6 +177,19 @@ rbush.prototype = {
     fromJSON: function (data) {
         this.data = data;
         return this;
+    },
+
+    _all: function (node, result) {
+        var nodesToSearch = [];
+        while (node) {
+            if (node.leaf) {
+                result.push.apply(result, node.children);
+            } else {
+                nodesToSearch.push.apply(nodesToSearch, node.children);
+            }
+            node = nodesToSearch.pop();
+        }
+        return result;
     },
 
     _build: function (items, level, height) {
@@ -437,6 +462,13 @@ rbush.prototype = {
                 this._calcBBox(path[i]);
             }
         }
+    },
+
+    _contains: function(a, b) {
+        return a[0] <= b[0] &&
+               a[1] <= b[1] &&
+               b[2] <= a[2] &&
+               b[3] <= a[3];
     },
 
     _intersects: function (a, b) {

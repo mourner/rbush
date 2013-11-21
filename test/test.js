@@ -119,6 +119,16 @@ describe('rbush', function () {
         });
     });
 
+    describe('all', function() {
+        it('returns all points in the tree', function() {
+
+            var tree = rbush(4).load(data);
+            var result = tree.all();
+
+            assert.deepEqual(result.sort(), data.sort());
+        });
+    });
+
     describe('toJSON & fromJSON', function () {
         it('exports and imports search tree in JSON format', function () {
 
