@@ -25,15 +25,16 @@ click to perform search under the cursor.
 The following sample performance test was done by generating
 random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
 (see `debug/perf.js` script).
-Performed with Node.js v0.10.17 on a Retina Macbook Pro 15 (mid-2012).
+Performed with Node.js v0.10.22 on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
 ---------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 8.79s  | 13.45s | 1.5x
-1000 searches of 1% area     | 1.07s  | 4.92s  | 4.6x
-1000 searches of 0.01% area  | 0.1s   | 2.33s  | 23x
-remove 1000 items one by one | 0.05s  | 3.55s  | 64x
-bulk insert 1M items         | 3.48s  | n/a    | 3.9x
+insert 1M items one by one   | 8.87s  | 14.6s  | 1.6x
+1000 searches of 0.01% area  | 0.09s  | 2.54s  | 28x
+1000 searches of 1% area     | 0.71s  | 5.08s  | 7x
+1000 searches of 10% area    | 3.04s  | 17.1s  | 5.6x
+remove 1000 items one by one | 0.05s  | 3.35s  | 67x
+bulk insert 1M items         | 3.53s  | n/a    | 3.9x
 
 ## Usage
 
@@ -149,3 +150,31 @@ Run the tests:
 Run the performance benchmarks:
 
     npm run perf
+
+## Changelog
+
+### 1.3 (21.11.13)
+
+- Significantly improved search performance (especially on large-bbox queries — up to 3x faster). [#11](https://github.com/mourner/rbush/pull/11)
+- Added `all` method for getting all of the tree items. [#11](https://github.com/mourner/rbush/pull/11)
+- Made `toBBox`, `compareMinX`, `compareMinY` methods public, made it possible to avoid Content Security Policy issues by overriding them for custom format. [#14](https://github.com/mourner/rbush/pull/14) [#12](https://github.com/mourner/rbush/pull/12)
+
+### 1.2.5 (05.11.13)
+
+- Fixed a bug where insertion failed on a tree that had all items removed previously. [#10](https://github.com/mourner/rbush/issues/10)
+
+### 1.2.4 (25.10.13)
+
+- Added Web Workers support. [#9](https://github.com/mourner/rbush/pull/9)
+
+### 1.2.3 (30.08.13)
+
+- Added AMD support. [#8](https://github.com/mourner/rbush/pull/8)
+
+### 1.2.2 (27.08.13)
+
+- Eliminated recursion when recalculating node bboxes (on insert, remove, load).
+
+### 1.2 (19.07.13)
+
+- First fully functional RBush release.
