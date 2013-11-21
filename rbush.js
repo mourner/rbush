@@ -44,14 +44,15 @@ rbush.prototype = {
                 childBBox = node.leaf ? this.toBBox(child) : child.bbox;
 
                 if (this._intersects(bbox, childBBox)) {
-                    if (this._contains(bbox, childBBox)) {
-                        if (node.leaf) {
-                            result.push(child);
-                        } else {
-                            this._all(node, result);
-                        }
+
+                    if (node.leaf) {
+                        result.push(child);
+
+                    } else if (this._contains(bbox, childBBox)) {
+                        this._all(node, result);
+
                     } else {
-                        (node.leaf ? result : nodesToSearch).push(child);
+                        nodesToSearch.push(child);
                     }
                 }
             }
@@ -169,7 +170,6 @@ rbush.prototype = {
     toBBox: function (item) { return item; },
 
     compareMinX: function (a, b) { return a[0] - b[0]; },
-
     compareMinY: function (a, b) { return a[1] - b[1]; },
 
     toJSON: function () { return this.data; },
