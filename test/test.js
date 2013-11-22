@@ -7,6 +7,15 @@ describe('rbush', function () { 'use strict';
         assert.deepEqual(a.sort(compare), b.sort(compare));
     }
 
+    function someData(n) {
+        var data = [];
+
+        for (var i = 0; i < n; i++) {
+            data.push([i, i, i, i]);
+        }
+        return data;
+    }
+
     var data = [[0,0,0,0],[10,10,10,10],[20,20,20,20],[25,0,25,0],[35,10,35,10],[45,20,45,20],[0,25,0,25],[10,35,10,35],
         [20,45,20,45],[25,25,25,25],[35,35,35,35],[45,45,45,45],[50,0,50,0],[60,10,60,10],[70,20,70,20],[75,0,75,0],
         [85,10,85,10],[95,20,95,20],[50,25,50,25],[60,35,60,35],[70,45,70,45],[75,25,75,25],[85,35,85,35],[95,45,95,45],
@@ -43,6 +52,14 @@ describe('rbush', function () { 'use strict';
 
             var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
             assert.deepEqual(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+        });
+
+        it('uses 9 max entries by default', function () {
+            var tree = rbush().load(someData(9));
+            assert.equal(tree.toJSON().height, 1);
+
+            var tree2 = rbush().load(someData(10));
+            assert.equal(tree2.toJSON().height, 2);
         });
     });
 
@@ -123,6 +140,35 @@ describe('rbush', function () { 'use strict';
 
             assert.deepEqual(tree.toJSON(), tree2.toJSON());
         });
+        it('does nothing if loading empty data', function () {
+            var tree = rbush().load([]);
+
+            assert.deepEqual(tree.toJSON(), rbush().toJSON());
+        });
+        it('properly splits tree root when merging trees of the same height', function () {
+            var tree = rbush(4)
+                .load(data)
+                .load(data);
+
+            assert.equal(tree.toJSON().height, 4);
+            assertSortedEqual(tree.all(), data.concat(data));
+        });
+        it('properly merges data of smaller or bigger tree heights', function () {
+            var smaller = someData(10);
+
+            var tree1 = rbush(4)
+                .load(data)
+                .load(smaller);
+
+            var tree2 = rbush(4)
+                .load(smaller)
+                .load(data);
+
+            assert.equal(tree1.toJSON().height, tree2.toJSON().height);
+
+            assertSortedEqual(tree1.all(), data.concat(smaller));
+            assertSortedEqual(tree2.all(), data.concat(smaller));
+        });
     });
 
     describe('search', function () {
@@ -136,6 +182,12 @@ describe('rbush', function () { 'use strict';
                 [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
             ]);
         });
+
+        it('return an empty array if nothing found', function () {
+            var result = rbush(4).load(data).search([200, 200, 210, 210]);
+
+            assert.deepEqual(result, []);
+        });
     });
 
     describe('all', function() {
@@ -145,6 +197,7 @@ describe('rbush', function () { 'use strict';
             var result = tree.all();
 
             assertSortedEqual(result, data);
+            assertSortedEqual(tree.search([0, 0, 100, 100]), data);
         });
     });
 
@@ -186,6 +239,81 @@ describe('rbush', function () { 'use strict';
                 'height':2,
                 'bbox':[0,0,3,3]
             });
+        });
+        it('does nothing if given undefined', function () {
+            assert.deepEqual(
+                rbush().load(data),
+                rbush().load(data).insert());
+        });
+        it('forms a valid tree if items are inserted one by one', function () {
+            var tree = rbush(4);
+
+            for (var i = 0; i < data.length; i++) {
+                tree.insert(data[i]);
+            }
+
+            var tree2 = rbush(4).load(data);
+
+            assert.ok(tree.toJSON().height - tree2.toJSON().height <= 1);
+
+            assertSortedEqual(tree.all(), tree2.all());
+        });
+    });
+
+    describe('remove', function () {
+        it('removes items correctly', function () {
+            var tree = rbush(4).load(data);
+
+            var len = data.length;
+
+            tree.remove(data[0]);
+            tree.remove(data[1]);
+            tree.remove(data[2]);
+
+            tree.remove(data[len - 1]);
+            tree.remove(data[len - 2]);
+            tree.remove(data[len - 3]);
+
+            assertSortedEqual(
+                data.slice(3, len - 3),
+                tree.all());
+        });
+        it('does nothing if nothing found', function () {
+            assert.deepEqual(
+                rbush().load(data),
+                rbush().load(data).remove([13, 13, 13, 13]));
+        });
+        it('does nothing if given undefined', function () {
+            assert.deepEqual(
+                rbush().load(data),
+                rbush().load(data).remove());
+        });
+        it('brings the tree to a clear state when removing everything one by one', function () {
+            var tree = rbush(4).load(data);
+
+            for (var i = 0; i < data.length; i++) {
+                tree.remove(data[i]);
+            }
+
+            assert.deepEqual(tree.toJSON(), rbush(4).toJSON());
+        });
+    });
+
+    describe('clear', function () {
+        it('should clear all the data in the tree', function () {
+            assert.deepEqual(
+                rbush(4).load(data).clear().toJSON(),
+                rbush(4).toJSON());
+        });
+    });
+
+    it('should have chainable API', function () {
+        assert.doesNotThrow(function () {
+            rbush()
+                .load(data)
+                .insert(data[0])
+                .remove(data[0])
+                .fromJSON(testTree);
         });
     });
 });
