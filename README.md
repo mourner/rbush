@@ -151,19 +151,28 @@ npm run cov  # generate test coverage report (coverage/lcov-report/index.html)
 
 ## Changelog
 
-### 1.3.0 (21.11.13)
+#### 1.3.0 <small>&mdash; Nov 21, 2013</small>
 
 - Significantly improved search performance (especially on large-bbox queries — up to 3x faster). [#11](https://github.com/mourner/rbush/pull/11)
 - Added `all` method for getting all of the tree items. [#11](https://github.com/mourner/rbush/pull/11)
 - Made `toBBox`, `compareMinX`, `compareMinY` methods public, made it possible to avoid Content Security Policy issues by overriding them for custom format. [#14](https://github.com/mourner/rbush/pull/14) [#12](https://github.com/mourner/rbush/pull/12)
 
-### 1.2.*
+#### 1.2.5 &mdash; Nov 5, 2013
 
-**1.2.5 (05.11.13):** Fixed a bug where insertion failed on a tree that had all items removed previously. [#10](https://github.com/mourner/rbush/issues/10)<br>
-**1.2.4 (25.10.13):** Added Web Workers support. [#9](https://github.com/mourner/rbush/pull/9)<br>
-**1.2.3 (30.08.13):** Added AMD support. [#8](https://github.com/mourner/rbush/pull/8)<br>
-**1.2.2 (27.08.13):** Eliminated recursion when recalculating node bboxes (on insert, remove, load).
+- Fixed a bug where insertion failed on a tree that had all items removed previously. [#10](https://github.com/mourner/rbush/issues/10)
 
-### 1.2.0 (19.07.13)
+#### 1.2.4 &mdash; Oct 25, 2013
+
+- Added Web Workers support. [#9](https://github.com/mourner/rbush/pull/9)
+
+#### 1.2.3 &mdash; Aug 30, 2013
+
+- Added AMD support. [#8](https://github.com/mourner/rbush/pull/8)
+
+#### 1.2.2 &mdash; Aug 27, 2013
+
+- Eliminated recursion when recalculating node bboxes (on insert, remove, load).
+
+#### 1.2.0 &mdash; Jul 19, 2013
 
 First fully functional RBush release.
