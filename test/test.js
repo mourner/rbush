@@ -3,6 +3,10 @@ var rbush = require('../rbush.js'),
 
 describe('rbush', function () { 'use strict';
 
+    function assertSortedEqual(a, b, compare) {
+        assert.deepEqual(a.sort(compare), b.sort(compare));
+    }
+
     var data = [[0,0,0,0],[10,10,10,10],[20,20,20,20],[25,0,25,0],[35,10,35,10],[45,20,45,20],[0,25,0,25],[10,35,10,35],
         [20,45,20,45],[25,25,25,25],[35,35,35,35],[45,45,45,45],[50,0,50,0],[60,10,60,10],[70,20,70,20],[75,0,75,0],
         [85,10,85,10],[95,20,95,20],[50,25,50,25],[60,35,60,35],[70,45,70,45],[75,25,75,25],[85,35,85,35],[95,45,95,45],
@@ -33,6 +37,7 @@ describe('rbush', function () { 'use strict';
         ], 'bbox':[70,0,95,95], 'height': 2
     }], 'bbox':[0,0,95,95], 'height': 3};
 
+
     describe('constructor', function () {
         it('accepts a format argument to customize the data format', function () {
 
@@ -41,8 +46,8 @@ describe('rbush', function () { 'use strict';
         });
     });
 
-    describe('override toBBox, compareMinX, compareMinY', function () {
-        it('allows custom data structures to be transformed', function () {
+    describe('toBBox, compareMinX, compareMinY', function () {
+        it('can be overriden to allow custom data structures', function () {
 
             var tree = rbush(4);
             tree.toBBox = function (item) {
@@ -56,9 +61,9 @@ describe('rbush', function () { 'use strict';
             };
 
             var data = [
-                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
-                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
-                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+                {minLng: -115, minLat:  45, maxLng: -105, maxLat:  55},
+                {minLng:  105, minLat:  45, maxLng:  115, maxLat:  55},
+                {minLng:  105, minLat: -55, maxLng:  115, maxLat: -45},
                 {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
             ];
 
@@ -68,32 +73,32 @@ describe('rbush', function () { 'use strict';
                 return a.minLng - b.minLng || a.minLat - b.minLat;
             }
 
-            assert.deepEqual(tree.search([-180, -90, 180, 90]).sort(byLngLat), [
-                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
-                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
-                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+            assertSortedEqual(tree.search([-180, -90, 180, 90]), [
+                {minLng: -115, minLat:  45, maxLng: -105, maxLat:  55},
+                {minLng:  105, minLat:  45, maxLng:  115, maxLat:  55},
+                {minLng:  105, minLat: -55, maxLng:  115, maxLat: -45},
                 {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
-            ].sort(byLngLat));
+            ], byLngLat);
 
-            assert.deepEqual(tree.search([-180, -90, 0, 90]).sort(byLngLat), [
-                {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
+            assertSortedEqual(tree.search([-180, -90, 0, 90]), [
+                {minLng: -115, minLat:  45, maxLng: -105, maxLat:  55},
                 {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
-            ].sort(byLngLat));
+            ], byLngLat);
 
-            assert.deepEqual(tree.search([0, -90, 180, 90]).sort(byLngLat), [
-                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55},
+            assertSortedEqual(tree.search([0, -90, 180, 90]), [
+                {minLng: 105, minLat:  45, maxLng: 115, maxLat:  55},
                 {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45}
-            ].sort(byLngLat));
+            ], byLngLat);
 
-            assert.deepEqual(tree.search([-180, 0, 180, 90]).sort(byLngLat), [
+            assertSortedEqual(tree.search([-180, 0, 180, 90]), [
                 {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
-                {minLng: 105, minLat: 45, maxLng: 115, maxLat: 55}
-            ].sort(byLngLat));
+                {minLng:  105, minLat: 45, maxLng:  115, maxLat: 55}
+            ], byLngLat);
 
-            assert.deepEqual(tree.search([-180, -90, 180, 0]).sort(byLngLat), [
-                {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45},
+            assertSortedEqual(tree.search([-180, -90, 180, 0]), [
+                {minLng:  105, minLat: -55, maxLng:  115, maxLat: -45},
                 {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
-            ].sort(byLngLat));
+            ], byLngLat);
 
         });
     });
@@ -104,6 +109,20 @@ describe('rbush', function () { 'use strict';
             var tree = rbush(4).load(data);
             assert.deepEqual(tree.toJSON(), testTree);
         });
+        it('uses standard insertion when given a low number of items', function () {
+
+            var tree = rbush(8)
+                .load(data)
+                .load(data.slice(0, 3));
+
+            var tree2 = rbush(8)
+                .load(data)
+                .insert(data[0])
+                .insert(data[1])
+                .insert(data[2]);
+
+            assert.deepEqual(tree.toJSON(), tree2.toJSON());
+        });
     });
 
     describe('search', function () {
@@ -112,10 +131,10 @@ describe('rbush', function () { 'use strict';
             var tree = rbush(4).load(data);
             var result = tree.search([40, 20, 80, 70]);
 
-            assert.deepEqual(result.sort(), [
+            assertSortedEqual(result, [
                 [70,20,70,20],[75,25,75,25],[45,45,45,45],[50,50,50,50],[60,60,60,60],[70,70,70,70],
                 [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
-            ].sort());
+            ]);
         });
     });
 
@@ -125,7 +144,7 @@ describe('rbush', function () { 'use strict';
             var tree = rbush(4).load(data);
             var result = tree.all();
 
-            assert.deepEqual(result.sort(), data.sort());
+            assertSortedEqual(result, data);
         });
     });
 
@@ -141,7 +160,32 @@ describe('rbush', function () { 'use strict';
         });
     });
 
-    describe('addOne', function () {
-        it('adds an item to an existing tree');
+    describe('insert', function () {
+        it('adds an item to an existing tree correctly', function () {
+            var tree = rbush(4).load([
+                [0, 0, 0, 0],
+                [1, 1, 1, 1],
+                [2, 2, 2, 2]
+            ]);
+            tree.insert([3, 3, 3, 3]);
+
+            assert.deepEqual(tree.toJSON(), {
+                'children':[[0,0,0,0],[1,1,1,1],[2,2,2,2],[3,3,3,3]],
+                'leaf':true,
+                'height':1,
+                'bbox':[0,0,3,3]
+            });
+
+            tree.insert([1, 1, 2, 2]);
+
+            assert.deepEqual(tree.toJSON(), {
+                'children':[
+                    {'children':[[0,0,0,0],[1,1,1,1]],'leaf':true,'height':1,'bbox':[0,0,1,1]},
+                    {'children':[[1,1,2,2],[2,2,2,2],[3,3,3,3]],'height':1,'leaf':true,'bbox':[1,1,3,3]}
+                ],
+                'height':2,
+                'bbox':[0,0,3,3]
+            });
+        });
     });
 });
