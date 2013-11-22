@@ -48,23 +48,12 @@ An optional argument to `rbush` defines the maximum number of entries in a tree 
 It drastically affects the performance, so you should adjust it
 considering the type of data and search queries you perform.
 
-### Data Format
-
-By default, RBush assumes the format of data points to be `[minX, minY, maxX, maxY]`.
-You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings
-as a second argument to `rbush` like this:
-
-```js
-var tree = rbush(9, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
-tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
-```
-
 ### Adding and Removing Data
 
 Insert an item:
 
 ```js
-var item = [20, 40, 30, 50];
+var item = [20, 40, 30, 50]; // [x1, y1, x2, y2]
 tree.insert(item);
 ```
 
@@ -78,6 +67,28 @@ Clear all items:
 
 ```js
 tree.clear();
+```
+
+Items inserted in the tree can have other arbitrary properties/elements that you can access later:
+
+```js
+var item1 = [20, 40, 30, 50, {foo: 'bar'}];
+tree.insert(item1);
+
+var item2 = [15, 15, 30, 30];
+item2.foo = 'bar';
+tree.insert(item2);
+```
+
+### Data Format
+
+By default, RBush assumes the format of data points to be `[minX, minY, maxX, maxY]`.
+You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings
+as a second argument to `rbush` like this:
+
+```js
+var tree = rbush(9, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
+tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
 ```
 
 ### Bulk-Inserting Data
@@ -107,6 +118,12 @@ var result = tree.search([40, 20, 80, 70]);
 ```
 
 Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
+
+```js
+var allItems = tree.all();
+```
+
+Returns all items of the tree.
 
 ### Export and Import
 
