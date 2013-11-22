@@ -34,7 +34,7 @@ insert 1M items one by one   | 8.87s  | 14.6s  | 1.6x
 1000 searches of 1% area     | 0.71s  | 5.08s  | 7x
 1000 searches of 10% area    | 3.04s  | 17.1s  | 5.6x
 remove 1000 items one by one | 0.05s  | 3.35s  | 67x
-bulk insert 1M items         | 3.53s  | n/a    | 3.9x
+bulk insert 1M items         | 3.53s  | n/a    | 4x
 
 ## Usage
 
