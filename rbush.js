@@ -283,13 +283,13 @@ rbush.prototype = {
         return node;
     },
 
-    _insert: function (item, level, isNode, root) {
+    _insert: function (item, level, isNode) {
 
         var bbox = isNode ? item.bbox : this.toBBox(item),
             insertPath = [];
 
         // find the best node for accommodating the item, saving all nodes along the path too
-        var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
+        var node = this._chooseSubtree(bbox, this.data, level, insertPath),
             splitOccured;
 
         // put the item into the node
