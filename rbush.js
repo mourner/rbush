@@ -289,22 +289,20 @@ rbush.prototype = {
             insertPath = [];
 
         // find the best node for accommodating the item, saving all nodes along the path too
-        var node = this._chooseSubtree(bbox, this.data, level, insertPath),
-            splitOccured;
+        var node = this._chooseSubtree(bbox, this.data, level, insertPath);
 
         // put the item into the node
         node.children.push(item);
         this._extend(node.bbox, bbox);
 
         // split on node overflow; propagate upwards if necessary
-        do {
-            splitOccured = false;
+        for (; level >= 0; --level) {
             if (insertPath[level].children.length > this._maxEntries) {
                 this._split(insertPath, level);
-                splitOccured = true;
-                level--;
+            } else {
+              break;
             }
-        } while (level >= 0 && splitOccured);
+        }
 
         // adjust bboxes along the insertion path
         this._adjustParentBBoxes(bbox, insertPath, level);
