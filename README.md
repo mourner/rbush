@@ -10,6 +10,8 @@ that allows you to perform queries like "all items within this bounding box" ver
 (e.g. hundreds of times faster than looping over all items).
 It's most commonly used in maps and data visualizations.
 
+[![Build Status](https://travis-ci.org/mourner/rbush.png?branch=master)](https://travis-ci.org/mourner/rbush)
+
 ## Demos
 
 The demos contain visualization of trees generated from 50k bulk-loaded random points.
@@ -156,19 +158,22 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 ## Development
 
-[![Build Status](https://travis-ci.org/mourner/rbush.png?branch=master)](https://travis-ci.org/mourner/rbush)
-
 ```bash
 npm install  # install dependencies
 
-npm test     # check the code with JSHint and run the tests
-npm run perf # run the performance benchmarks
-npm run cov  # generate test coverage report (coverage/lcov-report/index.html)
+npm test     # check the code with JSHint and run tests
+npm run perf # run performance benchmarks
+npm run cov  # report test coverage (with more detailed report in coverage/lcov-report/index.html)
 ```
 
 ## Changelog
 
-#### 1.3.0 <small>&mdash; Nov 21, 2013</small>
+#### 1.3.1 &mdash; Nov 24, 2013
+
+- Fixed minor error in the choose split axis algorithm. [#17](https://github.com/mourner/rbush/pull/17)
+- Much better test coverage (near 100%). [#6](https://github.com/mourner/rbush/issues/6)
+
+#### 1.3.0 &mdash; Nov 21, 2013
 
 - Significantly improved search performance (especially on large-bbox queries — up to 3x faster). [#11](https://github.com/mourner/rbush/pull/11)
 - Added `all` method for getting all of the tree items. [#11](https://github.com/mourner/rbush/pull/11)
