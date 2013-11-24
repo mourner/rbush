@@ -431,12 +431,7 @@ rbush.prototype = {
 
     // calculate node's bbox from bboxes of its children
     _calcBBox: function (node) {
-        node.bbox = this._empty();
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-            this._extend(node.bbox, node.leaf ? this.toBBox(child) : child.bbox);
-        }
+        node.bbox = this._distBBox(node, 0, node.children.length);
     },
 
     _adjustParentBBoxes: function (bbox, path, level) {
