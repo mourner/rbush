@@ -283,28 +283,26 @@ rbush.prototype = {
         return node;
     },
 
-    _insert: function (item, level, isNode, root) {
+    _insert: function (item, level, isNode) {
 
         var bbox = isNode ? item.bbox : this.toBBox(item),
             insertPath = [];
 
         // find the best node for accommodating the item, saving all nodes along the path too
-        var node = this._chooseSubtree(bbox, root || this.data, level, insertPath),
-            splitOccured;
+        var node = this._chooseSubtree(bbox, this.data, level, insertPath);
 
         // put the item into the node
         node.children.push(item);
         this._extend(node.bbox, bbox);
 
         // split on node overflow; propagate upwards if necessary
-        do {
-            splitOccured = false;
+        for (; level >= 0; --level) {
             if (insertPath[level].children.length > this._maxEntries) {
                 this._split(insertPath, level);
-                splitOccured = true;
-                level--;
+            } else {
+              break;
             }
-        } while (level >= 0 && splitOccured);
+        }
 
         // adjust bboxes along the insertion path
         this._adjustParentBBoxes(bbox, insertPath, level);
@@ -433,12 +431,7 @@ rbush.prototype = {
 
     // calculate node's bbox from bboxes of its children
     _calcBBox: function (node) {
-        node.bbox = this._empty();
-
-        for (var i = 0, len = node.children.length, child; i < len; i++) {
-            child = node.children[i];
-            this._extend(node.bbox, node.leaf ? this.toBBox(child) : child.bbox);
-        }
+        node.bbox = this._distBBox(node, 0, node.children.length);
     },
 
     _adjustParentBBoxes: function (bbox, path, level) {
