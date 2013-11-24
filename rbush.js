@@ -296,9 +296,10 @@ rbush.prototype = {
         this._extend(node.bbox, bbox);
 
         // split on node overflow; propagate upwards if necessary
-        for (; level >= 0; --level) {
+        while (level >= 0) {
             if (insertPath[level].children.length > this._maxEntries) {
                 this._split(insertPath, level);
+                level--;
             } else {
               break;
             }
