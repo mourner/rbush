@@ -408,7 +408,7 @@ rbush.prototype = {
             margin += this._margin(leftBBox);
         }
 
-        for (i = M - m - 1; i >= 0; i--) {
+        for (i = M - m - 1; i >= m; i--) {
             child = node.children[i];
             this._extend(rightBBox, node.leaf ? this.toBBox(child) : child.bbox);
             margin += this._margin(rightBBox);
