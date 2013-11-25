@@ -147,7 +147,7 @@ rbush.prototype = {
                 }
             }
 
-            if (!goingUp && !node.leaf && this._intersects(bbox, node.bbox)) { // go down
+            if (!goingUp && !node.leaf && this._contains(node.bbox, bbox)) { // go down
                 path.push(node);
                 indexes.push(i);
                 i = 0;
