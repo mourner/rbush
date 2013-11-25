@@ -35,7 +35,7 @@ insert 1M items one by one   | 8.87s  | 14.6s  | 1.6x
 1000 searches of 0.01% area  | 0.09s  | 2.54s  | 28x
 1000 searches of 1% area     | 0.71s  | 5.08s  | 7x
 1000 searches of 10% area    | 3.04s  | 17.1s  | 5.6x
-remove 1000 items one by one | 0.05s  | 3.35s  | 67x
+remove 1000 items one by one | 0.03s  | 3.32s  | 110x
 bulk insert 1M items         | 3.53s  | n/a    | 4x
 
 ## Usage
@@ -167,6 +167,10 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 ```
 
 ## Changelog
+
+#### 1.3.2 &mdash; Nov 25, 2013
+
+- Improved removal performance by ~50%. [#18](https://github.com/mourner/rbush/pull/18)
 
 #### 1.3.1 &mdash; Nov 24, 2013
 
