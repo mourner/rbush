@@ -444,11 +444,11 @@ rbush.prototype = {
 
     _condense: function (path) {
         // go through the path, removing empty nodes and updating bboxes
-        for (var i = path.length - 1, parent; i >= 0; i--) {
+        for (var i = path.length - 1, siblings; i >= 0; i--) {
             if (path[i].children.length === 0) {
                 if (i > 0) {
-                    parent = path[i - 1].children;
-                    parent.splice(parent.indexOf(path[i]), 1);
+                    siblings = path[i - 1].children;
+                    siblings.splice(siblings.indexOf(path[i]), 1);
                 } else {
                     this.clear();
                 }
