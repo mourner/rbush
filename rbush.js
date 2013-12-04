@@ -512,7 +512,7 @@ rbush.prototype = {
 
         // jshint evil: true
 
-        if (typof format === 'string') {
+        if (typeof format === 'string') {
           format = [format + '[0]', format + '[1]', format + '[2]', format + '[3]'];
         }
 
