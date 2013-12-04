@@ -94,6 +94,13 @@ var tree = rbush(9, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
 tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
 ```
 
+or if your data is mainly objects, you may pass a bbox accessor string like this
+
+```js
+var tree = rbush(9, '.bbox');
+tree.insert({id: 'foo', bbox: [30, 50, 40, 60]});
+```
+
 ### Bulk-Inserting Data
 
 Bulk-insert the given data into the tree:
