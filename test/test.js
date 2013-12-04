@@ -48,10 +48,16 @@ describe('rbush', function () { 'use strict';
 
 
     describe('constructor', function () {
-        it('accepts a format argument to customize the data format', function () {
+        it('accepts a format array to customize the data format', function () {
 
             var tree = rbush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
             assert.deepEqual(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}), [1, 2, 3, 4]);
+        });
+
+        it('accepts a format string to customize the data format', function () {
+
+            var tree = rbush(4, '.bbox');
+            assert.deepEqual(tree.toBBox({bbox:[1, 2, 3, 4]}), [1, 2, 3, 4]);
         });
 
         it('uses 9 max entries by default', function () {
@@ -61,6 +67,7 @@ describe('rbush', function () { 'use strict';
             var tree2 = rbush().load(someData(10));
             assert.equal(tree2.toJSON().height, 2);
         });
+
     });
 
     describe('toBBox, compareMinX, compareMinY', function () {
