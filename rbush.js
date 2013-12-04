@@ -504,13 +504,17 @@ rbush.prototype = {
     _compareNodeMinY: function (a, b) { return a.bbox[1] - b.bbox[1]; },
 
     _initFormat: function (format) {
-        // data format (minX, minY, maxX, maxY accessors)
+        // data format (minX, minY, maxX, maxY accessors) or bbox root
 
         // uses eval-type function compilation instead of just accepting a toBBox function
         // because the algorithms are very sensitive to sorting functions performance,
         // so they should be dead simple and without inner calls
 
         // jshint evil: true
+
+        if (typof format === 'string') {
+          format = [format + '[0]', format + '[1]', format + '[2]', format + '[3]'];
+        }
 
         var compareArr = ['return a', ' - b', ';'];
 
