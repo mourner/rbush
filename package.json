@@ -18,19 +18,19 @@
   },
   "main": "rbush.js",
   "devDependencies": {
-    "mocha": "~1.14.0",
-    "rtree": "~1.2.3",
-    "jshint": "~2.3.0",
-    "istanbul": "~0.1.45"
+    "tape": "^2.12.3",
+    "jshint": "^2.5.0",
+    "faucet": "0.0.1",
+    "istanbul": "~0.1.45",
+    "rtree": "~1.2.3"
   },
   "scripts": {
-    "test": "jshint rbush.js test/test.js && mocha",
+    "test": "jshint rbush.js test/test.js && node test/test.js | faucet",
     "perf": "node ./debug/perf.js",
-    "cov": "istanbul cover _mocha"
+    "cov": "istanbul cover test/test.js -x test/test.js"
   },
   "jshintConfig": {
     "quotmark": "single",
-    "strict": true,
     "trailing": true
   }
 }
