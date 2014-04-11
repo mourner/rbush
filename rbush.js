@@ -9,7 +9,7 @@
 function rbush(maxEntries, format) {
 
     // jshint newcap: false, validthis: true
-    if (!(this instanceof rbush)) { return new rbush(maxEntries, format); }
+    if (!(this instanceof rbush)) return new rbush(maxEntries, format);
 
     // max entries in a node is 9 by default; min node fill is 40% for best performance
     this._maxEntries = Math.max(4, maxEntries || 9);
@@ -33,30 +33,23 @@ rbush.prototype = {
         var node = this.data,
             result = [];
 
-        if (!this._intersects(bbox, node.bbox)) { return result; }
+        if (!this._intersects(bbox, node.bbox)) return result;
 
         var nodesToSearch = [],
             i, len, child, childBBox;
 
         while (node) {
             for (i = 0, len = node.children.length; i < len; i++) {
+
                 child = node.children[i];
                 childBBox = node.leaf ? this.toBBox(child) : child.bbox;
 
                 if (this._intersects(bbox, childBBox)) {
-
-                    if (node.leaf) {
-                        result.push(child);
-
-                    } else if (this._contains(bbox, childBBox)) {
-                        this._all(child, result);
-
-                    } else {
-                        nodesToSearch.push(child);
-                    }
+                    if (node.leaf) result.push(child);
+                    else if (this._contains(bbox, childBBox)) this._all(child, result);
+                    else nodesToSearch.push(child);
                 }
             }
-
             node = nodesToSearch.pop();
         }
 
@@ -64,7 +57,7 @@ rbush.prototype = {
     },
 
     load: function (data) {
-        if (!(data && data.length)) { return this; }
+        if (!(data && data.length)) return this;
 
         if (data.length < this._minEntries) {
             for (var i = 0, len = data.length; i < len; i++) {
@@ -100,9 +93,7 @@ rbush.prototype = {
     },
 
     insert: function (item) {
-        if (item) {
-            this._insert(item, this.data.height - 1);
-        }
+        if (item) this._insert(item, this.data.height - 1);
         return this;
     },
 
@@ -117,7 +108,7 @@ rbush.prototype = {
     },
 
     remove: function (item) {
-        if (!item) { return this; }
+        if (!item) return this;
 
         var node = this.data,
             bbox = this.toBBox(item),
@@ -159,9 +150,7 @@ rbush.prototype = {
                 node = parent.children[i];
                 goingUp = false;
 
-            } else { // nothing found
-                node = null;
-            }
+            } else node = null; // nothing found
         }
 
         return this;
@@ -182,11 +171,9 @@ rbush.prototype = {
     _all: function (node, result) {
         var nodesToSearch = [];
         while (node) {
-            if (node.leaf) {
-                result.push.apply(result, node.children);
-            } else {
-                nodesToSearch.push.apply(nodesToSearch, node.children);
-            }
+            if (node.leaf) result.push.apply(result, node.children);
+            else nodesToSearch.push.apply(nodesToSearch, node.children);
+
             node = nodesToSearch.pop();
         }
         return result;
@@ -253,7 +240,7 @@ rbush.prototype = {
         while (true) {
             path.push(node);
 
-            if (node.leaf || path.length - 1 === level) { break; }
+            if (node.leaf || path.length - 1 === level) break;
 
             minArea = minEnlargement = Infinity;
 
@@ -300,9 +287,7 @@ rbush.prototype = {
             if (insertPath[level].children.length > this._maxEntries) {
                 this._split(insertPath, level);
                 level--;
-            } else {
-              break;
-            }
+            } else break;
         }
 
         // adjust bboxes along the insertion path
@@ -323,18 +308,13 @@ rbush.prototype = {
             height: node.height
         };
 
-        if (node.leaf) {
-            newNode.leaf = true;
-        }
+        if (node.leaf) newNode.leaf = true;
 
         this._calcBBox(node);
         this._calcBBox(newNode);
 
-        if (level) {
-            insertPath[level - 1].children.push(newNode);
-        } else {
-            this._splitRoot(node, newNode);
-        }
+        if (level) insertPath[level - 1].children.push(newNode);
+        else this._splitRoot(node, newNode);
     },
 
     _splitRoot: function (node, newNode) {
@@ -387,10 +367,7 @@ rbush.prototype = {
 
         // if total distributions margin value is minimal for x, sort by minX,
         // otherwise it's already sorted by minY
-
-        if (xMargin < yMargin) {
-            node.children.sort(compareMinX);
-        }
+        if (xMargin < yMargin) node.children.sort(compareMinX);
     },
 
     // total margin of all possible split distributions where each node is at least m full
@@ -449,12 +426,10 @@ rbush.prototype = {
                 if (i > 0) {
                     siblings = path[i - 1].children;
                     siblings.splice(siblings.indexOf(path[i]), 1);
-                } else {
-                    this.clear();
-                }
-            } else {
-                this._calcBBox(path[i]);
-            }
+
+                } else this.clear();
+
+            } else this._calcBBox(path[i]);
         }
     },
 
