@@ -521,16 +521,10 @@ rbush.prototype = {
     }
 };
 
-if (typeof define === 'function' && define.amd) {
-    define(function() {
-        return rbush;
-    });
-} else if (typeof module !== 'undefined') {
-    module.exports = rbush;
-} else if (typeof self !== 'undefined') {
-    self.rbush = rbush;
-} else {
-    window.rbush = rbush;
-}
+// export as AMD/CommonJS module or global variable
+if (typeof define === 'function' && define.amd) define(function() { return rbush; });
+else if (typeof module !== 'undefined') module.exports = rbush;
+else if (typeof self !== 'undefined') self.rbush = rbush;
+else window.rbush = rbush;
 
 })();
