@@ -56,6 +56,103 @@ rbush.prototype = {
         return result;
     },
 
+
+    _distance: function(point, rect) {
+        // compute distance from point to nearest edge of rect
+        var oX = Infinity,
+            oY = Infinity,
+            xInside = false,
+            yInside = false;
+
+        if (point[0] > rect[2]) {
+            // point is to right of right edge of rect, return distance to right side
+            oX = rect[2];
+        } else if (point[0] < rect[0]) {
+            // point is to left
+            oX = rect[0];
+        } else {
+            // point is inside
+            xInside = true;
+            oX = rect[0] + (rect[2]-rect[0])/2;
+        }
+
+        if (point[1] > rect[3]) {
+            oY = rect[3];
+        } else if (point[1] < rect[1]) {
+            oY = rect[1];
+        } else {
+            yInside = true;
+            oY = rect[1] + (rect[3]-rect[1])/2;
+        }
+
+        if (xInside && yInside) {
+            return 0;
+        } 
+        var distX = (point[0] - oX),
+            distY = (point[1] - oY);
+
+        return (distX*distX) + (distY*distY);
+    },
+
+    nearest: function(point) {
+        var node = this.data,
+            dist, i, len,
+            child, childBBox,
+            nodesToSearch = [],
+            nearest = {
+                dist: Infinity,
+                rect: null,
+                node: null
+            };
+
+        if (typeof (point)==='object' && point.x && point.y) {
+            point = [point.x, point.y];
+        } else if (Object.prototype.toString.call(point) != '[object Array]') {
+            // its not an array
+            throw new Error('Invalid argument, nearest requires point array or object');
+        }
+
+        var sortDistance = function(a,b) { return a._dist - b._dist; };
+
+        while (node) {
+            if (node.leaf) {
+                // compute distance to actual objects
+                for (i=0, len = node.children.length; i < len; i++) {
+                    child = node.children[i];
+                    childBBox = node.leaf ? this.toBBox(child) : child.bbox;
+
+                    dist = this._distance(point, childBBox);
+                    if (dist < nearest.dist) {
+                        nearest.dist = dist;
+                        nearest.rect = childBBox;
+                        nearest.node = child;
+                    }
+                }
+            } else {
+                // calculate distance to each subtree bbox
+                for (i=0, len = node.children.length; i < len; i++) {
+                    child = node.children[i];
+                    childBBox = node.leaf ? this.toBBox(child) : child.bbox;
+
+                    dist = this._distance(point, childBBox);
+                    // if its greater than our nearest discard
+                    if (dist > nearest.dist) {
+                        // discard
+                        continue;
+                    }
+                    // otherwise add to our list of items to search
+                    child._dist = dist;
+                    nodesToSearch.push(child);
+                }
+
+                // resort our list by distance
+                nodesToSearch.sort(sortDistance);
+            }
+            node = nodesToSearch.pop();
+        }
+        return nearest.node;
+    },
+
     load: function (data) {
         if (!(data && data.length)) return this;
 
