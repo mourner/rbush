@@ -190,6 +190,7 @@ rbush.prototype = {
             node = {
                 children: items.slice(left, right + 1),
                 height: 1,
+                bbox: null,
                 leaf: true
             };
             calcBBox(node, this.toBBox);
@@ -208,7 +209,8 @@ rbush.prototype = {
 
         node = {
             children: [],
-            height: height
+            height: height,
+            bbox: null
         };
 
         var N2 = Math.ceil(N / M),
@@ -219,8 +221,9 @@ rbush.prototype = {
         for (i = left; i <= right; i += N1) {
 
             if (i + N1 <= right) partitionSort(items, i, right, i + N1, this.compareMinX);
+            right2 = Math.min(i + N1 - 1, right);
 
-            for (j = i, right2 = Math.min(i + N1 - 1, right); j <= right2; j += N2) {
+            for (j = i; j <= right2; j += N2) {
 
                 if (j + N2 <= right2) partitionSort(items, j, right2, j + N2, this.compareMinY);
 
