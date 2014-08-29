@@ -31,7 +31,7 @@
     "cov": "istanbul cover test/test.js -x test/test.js"
   },
   "jshintConfig": {
-    "quotmark": "single",
+    "unused": "true",
     "trailing": true
   }
 }
