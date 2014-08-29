@@ -118,12 +118,9 @@ t('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data str
 
 t('#load bulk-loads the given data given max node entries and forms a proper search tree', function (t) {
 
-    console.log(JSON.stringify(data));
-
     var tree = rbush(4).load(data);
     t.same(tree.toJSON(), testTree);
 
-    console.log("HELLO !");
     t.end();
 });
 
@@ -213,7 +210,7 @@ t('#all returns all points in the tree', function(t) {
 
 t('#toJSON & #fromJSON exports and imports search tree in JSON format', function (t) {
 
-    var tree = rbush(4).load(data);
+    var tree = rbush(4);
     tree.fromJSON(testTree);
 
     var tree2 = rbush(4).load(data);
