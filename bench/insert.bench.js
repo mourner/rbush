@@ -3,14 +3,16 @@ var Benchmark = require('benchmark'),
     genData = require('./gendata');
 
 var N = 10000,
-    maxFill = 16;
+    maxFill = 512;
 
 var data = genData(N, 1);
 
 new Benchmark.Suite()
-.add('bulk loading ' + N + ' items (' + maxFill + ' node size)', function () {
+.add('insert ' + N + ' items (' + maxFill + ' node size)', function () {
     var tree = rbush(maxFill);
-    tree.load(data);
+    for (var i = 0; i < N; i++) {
+        tree.insert(data[i]);
+    }
 })
 .on('error', function(event) {
     console.log(event.target.error);
