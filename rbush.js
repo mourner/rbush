@@ -100,9 +100,9 @@ rbush.prototype = {
     clear: function () {
         this.data = {
             children: [],
-            leaf: true,
+            height: 1,
             bbox: this._empty(),
-            height: 1
+            leaf: true
         };
         return this;
     },
@@ -188,8 +188,8 @@ rbush.prototype = {
         if (N <= M) {
             node = {
                 children: items,
-                leaf: true,
-                height: 1
+                height: 1,
+                leaf: true
             };
             this._calcBBox(node);
             return node;
@@ -212,8 +212,8 @@ rbush.prototype = {
             height: height
         };
 
-        var N1 = Math.ceil(N / M) * Math.ceil(Math.sqrt(M)),
-            N2 = Math.ceil(N / M),
+        var N2 = Math.ceil(N / M),
+            N1 = N2 * Math.ceil(Math.sqrt(M)),
             compare = level % 2 === 1 ? this.compareMinX : this.compareMinY,
             i, j, slice, sliceLen, childNode;
 
@@ -319,9 +319,10 @@ rbush.prototype = {
 
     _splitRoot: function (node, newNode) {
         // split root node
-        this.data = {};
-        this.data.children = [node, newNode];
-        this.data.height = node.height + 1;
+        this.data = {
+            children: [node, newNode],
+            height: node.height + 1
+        };
         this._calcBBox(this.data);
     },
 
