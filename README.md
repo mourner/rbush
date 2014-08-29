@@ -31,12 +31,12 @@ Performed with Node.js v0.10.22 on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
 ---------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 8.87s  | 14.6s  | 1.6x
-1000 searches of 0.01% area  | 0.09s  | 2.54s  | 28x
-1000 searches of 1% area     | 0.71s  | 5.08s  | 7x
-1000 searches of 10% area    | 3.04s  | 17.1s  | 5.6x
-remove 1000 items one by one | 0.03s  | 3.32s  | 110x
-bulk insert 1M items         | 3.53s  | n/a    | 4x
+insert 1M items one by one   | 6.18s  | 16.46s | 2.7x
+1000 searches of 0.01% area  | 0.07s  | 2.52s  | 35x
+1000 searches of 1% area     | 0.53s  | 5.03s  | 9.6x
+1000 searches of 10% area    | 2.45s  | 16.76s | 6.8x
+remove 1000 items one by one | 0.03s  | 3.2s   | 118x
+bulk-insert 1M items         | 3.92s  | n/a    | 4.2x
 
 ## Usage
 
@@ -168,6 +168,12 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 ```
 
 ## Changelog
+
+#### 1.3.3 &mdash; Aug 30, 2014
+
+- Improved bulk loading performance by ~60-70%.
+- Improved insertion performance by ~40%.
+- Improved search performance by ~30%.
 
 #### 1.3.2 &mdash; Nov 25, 2013
 
