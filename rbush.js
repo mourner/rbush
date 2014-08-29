@@ -67,7 +67,7 @@ rbush.prototype = {
         }
 
         // recursively build the tree with the given data from stratch using OMT algorithm
-        var node = this._build(data.slice(), 0);
+        var node = this._build(data.slice(), 0, data.length - 1, 0);
 
         if (!this.data.children.length) {
             // save as is if tree is empty
@@ -179,15 +179,15 @@ rbush.prototype = {
         return result;
     },
 
-    _build: function (items, level, height) {
+    _build: function (items, left, right, level, height) {
 
-        var N = items.length,
+        var N = right - left + 1,
             M = this._maxEntries,
             node;
 
         if (N <= M) {
             node = {
-                children: items,
+                children: items.slice(left, right + 1),
                 height: 1,
                 leaf: true
             };
@@ -201,8 +201,6 @@ rbush.prototype = {
 
             // target number of root entries to maximize storage utilization
             M = Math.ceil(N / Math.pow(M, height - 1));
-
-            items.sort(this.compareMinX);
         }
 
         // TODO eliminate recursion?
@@ -214,16 +212,19 @@ rbush.prototype = {
 
         var N2 = Math.ceil(N / M),
             N1 = N2 * Math.ceil(Math.sqrt(M)),
-            compare = level % 2 === 1 ? this.compareMinX : this.compareMinY,
-            i, j, slice, sliceLen, childNode;
+            i, j, right2, childNode;
 
         // split the items into M mostly square tiles
-        for (i = 0; i < N; i += N1) {
-            slice = items.slice(i, i + N1).sort(compare);
+        for (i = left; i <= right; i += N1) {
 
-            for (j = 0, sliceLen = slice.length; j < sliceLen; j += N2) {
+            if (i + N1 <= right) partitionSort(items, i, right, i + N1, this.compareMinX);
+
+            for (j = i, right2 = Math.min(i + N1 - 1, right); j <= right2; j += N2) {
+
+                if (j + N2 <= right2) partitionSort(items, j, right2, j + N2, this.compareMinY);
+
                 // pack each entry recursively
-                childNode = this._build(slice.slice(j, j + N2), level + 1, height - 1);
+                childNode = this._build(items, j, Math.min(j + N2 - 1, right2), level + 1, height - 1);
                 node.children.push(childNode);
             }
         }
@@ -496,6 +497,45 @@ rbush.prototype = {
         this.toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
     }
 };
+
+function partitionSort(arr, left, right, k, compare) {
+    var pivot;
+
+    while (true) {
+        pivot = Math.floor((left + right) / 2);
+        pivot = partition(arr, left, right, pivot, compare);
+
+        if (k === pivot) break;
+        else if (k < pivot) right = pivot - 1;
+        else left = pivot + 1;
+    }
+
+    partition(arr, left, right, k, compare);
+}
+
+function partition(arr, left, right, pivot, compare) {
+    var k = left,
+        value = arr[pivot];
+
+    swap(arr, pivot, right);
+
+    for (var i = left; i < right; i++) {
+        if (compare(arr[i], value) < 0) {
+            swap(arr, k, i);
+            k++;
+        }
+    }
+    swap(arr, right, k);
+
+    return k;
+}
+
+function swap(arr, i, j) {
+    var tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+}
+
 
 // export as AMD/CommonJS module or global variable
 if (typeof define === 'function' && define.amd) define(function() { return rbush; });
