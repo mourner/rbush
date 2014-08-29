@@ -1,6 +1,6 @@
 {
   "name": "rbush",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "High-performance 2D spatial index for rectangles (based on R*-tree with bulk loading and bulk insertion algorithms)",
   "homepage": "https://github.com/mourner/rbush",
   "keywords": [
@@ -20,10 +20,10 @@
   "devDependencies": {
     "benchmark": "^1.0.0",
     "faucet": "0.0.1",
-    "istanbul": "~0.1.45",
-    "jshint": "^2.5.0",
-    "rtree": "~1.2.3",
-    "tape": "^2.12.3"
+    "istanbul": "~0.3.0",
+    "jshint": "^2.5.5",
+    "rtree": "~1.4.2",
+    "tape": "^2.14.0"
   },
   "scripts": {
     "test": "jshint rbush.js test/test.js && node test/test.js | faucet",
@@ -31,7 +31,7 @@
     "cov": "istanbul cover test/test.js -x test/test.js"
   },
   "jshintConfig": {
-    "quotmark": "single",
+    "unused": "true",
     "trailing": true
   }
 }

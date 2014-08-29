@@ -96,17 +96,17 @@ for (i = 0; i < 1000; i++) {
 console.timeEnd('1000 searches 0.01%');
 
 
-console.time('100 naive searches 1%');
-var result;
-for (var j = 0; j < 100; j++) {
-    result = [];
-    for (i = 0; i < N; i++) {
-        if (tree._intersects(bboxes10[j], data[i])) {
-            result.push(data[i]);
-        }
-    }
-}
-console.timeEnd('100 naive searches 1%');
+// console.time('100 naive searches 1%');
+// var result;
+// for (var j = 0; j < 100; j++) {
+//     result = [];
+//     for (i = 0; i < N; i++) {
+//         if (tree._intersects(bboxes10[j], data[i])) {
+//             result.push(data[i]);
+//         }
+//     }
+// }
+// console.timeEnd('100 naive searches 1%');
 
 
 
