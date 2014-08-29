@@ -18,11 +18,12 @@
   },
   "main": "rbush.js",
   "devDependencies": {
-    "tape": "^2.12.3",
-    "jshint": "^2.5.0",
+    "benchmark": "^1.0.0",
     "faucet": "0.0.1",
     "istanbul": "~0.1.45",
-    "rtree": "~1.2.3"
+    "jshint": "^2.5.0",
+    "rtree": "~1.2.3",
+    "tape": "^2.12.3"
   },
   "scripts": {
     "test": "jshint rbush.js test/test.js && node test/test.js | faucet",
