@@ -38,11 +38,11 @@ function genInsertOneByOne(K, M) {
     return function () {
         var data2 = genData(K, M, R);
 
-        console.time('insert ' + K + ' items');
+        console.profile('insert ' + K + ' items');
         for (var i = 0; i < K; i++) {
             tree.insert(data2[i]);
         }
-        console.timeEnd('insert ' + K + ' items');
+        console.profileEnd('insert ' + K + ' items');
 
         draw();
     };
@@ -52,9 +52,9 @@ function genBulkInsert(K, M) {
     return function () {
         var data2 = genData(K, M, R);
 
-        console.time('bulk-insert ' + K + ' items');
+        console.profile('bulk-insert ' + K + ' items');
         tree.load(data2);
-        console.timeEnd('bulk-insert ' + K + ' items');
+        console.profileEnd('bulk-insert ' + K + ' items');
 
         data = data.concat(data2);
 
