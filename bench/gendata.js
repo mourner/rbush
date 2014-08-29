@@ -16,3 +16,11 @@ function genData(N, size) {
     }
     return data;
 };
+
+genData.convert = function (data) {
+    var result = [];
+    for (var i = 0; i < data.length; i++) {
+        result.push({x: data[i][0], y: data[i][1], w: data[i][2] - data[i][0], h: data[i][3] - data[i][1]});
+    }
+    return result;
+}
