@@ -145,7 +145,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
-* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading)
+* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading) combined with quickselect unordered partial sorting
 * bulk insertion: STLT algorithm (Small-Tree-Large-Tree)
 * search: standard non-recursive R-tree search
 
@@ -155,7 +155,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 * [The R*-tree: An Efficient and Robust Access Method for Points and Rectangles+](http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf)
 * [OMT: Overlap Minimizing Top-down Bulk Loading Algorithm for R-tree](http://ftp.informatik.rwth-aachen.de/Publications/CEUR-WS/Vol-74/files/FORUM_18.pdf)
 * [Bulk Insertions into R-Trees Using the Small-Tree-Large-Tree Approach](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
-* [R-Trees: Theory and Applications (book)](http://metro-natshar-31-71.brain.net.pk/articles/1852339772.pdf)
+* [R-Trees: Theory and Applications (book)](http://www.apress.com/9781852339777)
 
 ## Development
 
