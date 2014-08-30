@@ -32,6 +32,16 @@
   },
   "jshintConfig": {
     "unused": "true",
-    "trailing": true
+    "undef": true,
+    "trailing": true,
+    "eqeqeq": true,
+    "es3": true,
+    "indent": 4,
+    "node": true,
+    "browser": true,
+    "worker": true,
+    "globals": {
+      "define": false
+    }
   }
 }

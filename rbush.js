@@ -180,13 +180,14 @@ rbush.prototype = {
         return result;
     },
 
-    _build: function (items, left, right, level, height) {
+    _build: function (items, left, right, height) {
 
         var N = right - left + 1,
             M = this._maxEntries,
             node;
 
         if (N <= M) {
+            // reached leaf level; return leaf
             node = {
                 children: items.slice(left, right + 1),
                 height: 1,
@@ -197,7 +198,7 @@ rbush.prototype = {
             return node;
         }
 
-        if (!level) {
+        if (!height) {
             // target height of the bulk-loaded tree
             height = Math.ceil(Math.log(N) / Math.log(M));
 
@@ -213,23 +214,26 @@ rbush.prototype = {
             bbox: null
         };
 
+        // split the items into M mostly square tiles
+
         var N2 = Math.ceil(N / M),
             N1 = N2 * Math.ceil(Math.sqrt(M)),
-            i, j, right2, childNode;
+            i, j, right2, right3;
 
-        // split the items into M mostly square tiles
         for (i = left; i <= right; i += N1) {
 
+            // sort so that N1 items with the smallest minX between i and right come first (not ordered)
             if (i + N1 <= right) partitionSort(items, i, right, i + N1, this.compareMinX);
             right2 = Math.min(i + N1 - 1, right);
 
             for (j = i; j <= right2; j += N2) {
 
+                // sort so that N2 items with the smallest minY between j and right2 come first (not ordered)
                 if (j + N2 <= right2) partitionSort(items, j, right2, j + N2, this.compareMinY);
+                right3 = Math.min(j + N2 - 1, right2);
 
                 // pack each entry recursively
-                childNode = this._build(items, j, Math.min(j + N2 - 1, right2), level + 1, height - 1);
-                node.children.push(childNode);
+                node.children.push(this._build(items, j, right3, height - 1));
             }
         }
 
@@ -442,6 +446,7 @@ rbush.prototype = {
     }
 };
 
+
 // calculate node's bbox from bboxes of its children
 function calcBBox(node, toBBox) {
     node.bbox = distBBox(node, 0, node.children.length, toBBox);
@@ -458,7 +463,6 @@ function distBBox(node, k, p, toBBox) {
 
     return bbox;
 }
-
 
 function empty() { return [Infinity, Infinity, -Infinity, -Infinity]; }
 
@@ -506,6 +510,7 @@ function intersects (a, b) {
 }
 
 
+// sort array between left and right (inclusive) so that the smallest k elements come first (unordered)
 function partitionSort(arr, left, right, k, compare) {
     var pivot;
 
@@ -521,6 +526,7 @@ function partitionSort(arr, left, right, k, compare) {
     partition(arr, left, right, k, compare);
 }
 
+// sort array so that all values less than the value at pivot come before it
 function partition(arr, left, right, pivot, compare) {
     var k = left,
         value = arr[pivot];
