@@ -13,7 +13,7 @@
 <script src="viz.js"></script>
 <script>
 
-var N = 50000,
+var N = 100000,
     M = 30,
     R = 100;
 
@@ -29,7 +29,7 @@ function genData(N, M, R) {
     return data;
 }
 
-var tree = rbush(10);
+var tree = rbush(16);
 var data = [];
 
 genBulkInsert(N, M)();

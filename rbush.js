@@ -223,13 +223,13 @@ rbush.prototype = {
         for (i = left; i <= right; i += N1) {
 
             // sort so that N1 items with the smallest minX between i and right come first (not ordered)
-            if (i + N1 <= right) partitionSort(items, i, right, i + N1, this.compareMinX);
+            if (i + N1 <= right) select(items, i, right, i + N1, this.compareMinX);
             right2 = Math.min(i + N1 - 1, right);
 
             for (j = i; j <= right2; j += N2) {
 
                 // sort so that N2 items with the smallest minY between j and right2 come first (not ordered)
-                if (j + N2 <= right2) partitionSort(items, j, right2, j + N2, this.compareMinY);
+                if (j + N2 <= right2) select(items, j, right2, j + N2, this.compareMinY);
                 right3 = Math.min(j + N2 - 1, right2);
 
                 // pack each entry recursively
@@ -511,37 +511,44 @@ function intersects (a, b) {
 
 
 // sort array between left and right (inclusive) so that the smallest k elements come first (unordered)
-function partitionSort(arr, left, right, k, compare) {
-    var pivot;
+function select(arr, left, right, k, compare) {
+    var n, i, z, s, sd, newLeft, newRight, t, j;
 
-    while (true) {
-        pivot = Math.floor((left + right) / 2);
-        pivot = partition(arr, left, right, pivot, compare);
-
-        if (k === pivot) break;
-        else if (k < pivot) right = pivot - 1;
-        else left = pivot + 1;
-    }
-
-    partition(arr, left, right, k, compare);
-}
-
-// sort array so that all values less than the value at pivot come before it
-function partition(arr, left, right, pivot, compare) {
-    var k = left,
-        value = arr[pivot];
-
-    swap(arr, pivot, right);
-
-    for (var i = left; i < right; i++) {
-        if (compare(arr[i], value) < 0) {
-            swap(arr, k, i);
-            k++;
+    while (right > left) {
+        if (right - left > 1000) {
+            n = right - left + 1;
+            i = k - left + 1;
+            z = Math.log(n);
+            s = 0.5 * Math.exp(2 * z / 3);
+            sd = 0.5 * Math.sqrt(z * s * (n - s) / n) * (i - n / 2 < 0 ? -1 : 1);
+            newLeft = Math.max(left, Math.floor(k - i * s / n + sd));
+            newRight = Math.min(right, Math.floor(k + (n - i) * s / n + sd));
+            select(arr, newLeft, newRight, k, compare);
         }
-    }
-    swap(arr, right, k);
 
-    return k;
+        t = arr[k];
+        i = left;
+        j = right;
+
+        swap(arr, left, k);
+        if (compare(arr[right], t) > 0) swap(arr, left, right);
+
+        while (i < j) {
+            swap(arr, i, j);
+            i++;
+            j--;
+            while (compare(arr[i], t) < 0) i++;
+            while (compare(arr[j], t) > 0) j--;
+        }
+
+        if (compare(arr[left], t) === 0) swap(arr, left, j);
+        else {
+            j++;
+            swap(arr, j, right);
+        }
+        if (j <= k) left = j + 1;
+        if (k <= j) right = j - 1;
+    }
 }
 
 function swap(arr, i, j) {
