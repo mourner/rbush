@@ -220,16 +220,16 @@ rbush.prototype = {
             N1 = N2 * Math.ceil(Math.sqrt(M)),
             i, j, right2, right3;
 
+        multiSelect(items, left, right, N1, this.compareMinX);
+
         for (i = left; i <= right; i += N1) {
 
-            // sort so that N1 items with the smallest minX between i and right come first (not ordered)
-            if (i + N1 <= right) select(items, i, right, i + N1, this.compareMinX);
             right2 = Math.min(i + N1 - 1, right);
+
+            multiSelect(items, i, right2, N2, this.compareMinY);
 
             for (j = i; j <= right2; j += N2) {
 
-                // sort so that N2 items with the smallest minY between j and right2 come first (not ordered)
-                if (j + N2 <= right2) select(items, j, right2, j + N2, this.compareMinY);
                 right3 = Math.min(j + N2 - 1, right2);
 
                 // pack each entry recursively
@@ -509,13 +509,32 @@ function intersects (a, b) {
            b[3] >= a[1];
 }
 
+// sort an array so that items come in groups of n unsorted items, with groups sorted between each other;
+// combines selection algorithm with binary divide & conquer approach
+
+function multiSelect(arr, left, right, n, compare) {
+    var stack = [left, right],
+        mid;
+
+    while (stack.length) {
+        right = stack.pop();
+        left = stack.pop();
+
+        if (right - left <= n) continue;
+
+        mid = left + Math.ceil((right - left) / n / 2) * n;
+        select(arr, left, right, mid, compare);
+
+        stack.push(left, mid, mid, right);
+    }
+}
 
 // sort array between left and right (inclusive) so that the smallest k elements come first (unordered)
 function select(arr, left, right, k, compare) {
     var n, i, z, s, sd, newLeft, newRight, t, j;
 
     while (right > left) {
-        if (right - left > 1000) {
+        if (right - left > 600) {
             n = right - left + 1;
             i = k - left + 1;
             z = Math.log(n);
@@ -546,6 +565,7 @@ function select(arr, left, right, k, compare) {
             j++;
             swap(arr, j, right);
         }
+
         if (j <= k) left = j + 1;
         if (k <= j) right = j - 1;
     }
