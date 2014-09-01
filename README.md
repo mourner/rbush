@@ -36,7 +36,7 @@ insert 1M items one by one   | 6.18s  | 16.46s | 2.7x
 1000 searches of 1% area     | 0.53s  | 5.03s  | 9.6x
 1000 searches of 10% area    | 2.45s  | 16.76s | 6.8x
 remove 1000 items one by one | 0.03s  | 3.2s   | 118x
-bulk-insert 1M items         | 3.92s  | n/a    | 4.2x
+bulk-insert 1M items         | 1.99s  | n/a    | 8.3x
 
 ## Usage
 
@@ -145,7 +145,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
-* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading) combined with quickselect unordered partial sorting
+* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading) combined with Floyd–Rivest selection algorithm
 * bulk insertion: STLT algorithm (Small-Tree-Large-Tree)
 * search: standard non-recursive R-tree search
 
@@ -169,9 +169,14 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 
 ## Changelog
 
+#### 1.3.4 &mdash; Aug 31, 2014
+
+- Improved bulk insertion performance for a large number of items (e.g. up to 100% for inserting a million items).
+- Fixed performance regression for high node sizes.
+
 #### 1.3.3 &mdash; Aug 30, 2014
 
-- Improved bulk loading performance by ~60-70%.
+- Improved bulk insertion performance by ~60-70%.
 - Improved insertion performance by ~40%.
 - Improved search performance by ~30%.
 
