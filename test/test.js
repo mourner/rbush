@@ -119,7 +119,7 @@ t('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data str
 t('#load bulk-loads the given data given max node entries and forms a proper search tree', function (t) {
 
     var tree = rbush(4).load(data);
-    t.same(tree.toJSON(), testTree);
+    sortedEqual(t, tree.all(), rbush(4).fromJSON(testTree).all());
 
     t.end();
 });
@@ -215,7 +215,7 @@ t('#toJSON & #fromJSON exports and imports search tree in JSON format', function
 
     var tree2 = rbush(4).load(data);
 
-    t.same(tree.toJSON(), tree2.toJSON());
+    sortedEqual(t, tree.all(), tree2.all());
     t.end();
 });
 
