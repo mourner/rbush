@@ -20,10 +20,10 @@
   "devDependencies": {
     "benchmark": "^1.0.0",
     "faucet": "0.0.1",
-    "istanbul": "~0.3.0",
-    "jshint": "^2.5.5",
+    "istanbul": "~0.3.2",
+    "jshint": "^2.5.10",
     "rtree": "~1.4.2",
-    "tape": "^2.14.0"
+    "tape": "^3.0.3"
   },
   "scripts": {
     "test": "jshint rbush.js test/test.js && node test/test.js | faucet",
