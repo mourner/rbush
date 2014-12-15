@@ -2,6 +2,14 @@ var W = 700,
     canvas = document.getElementById('canvas'),
     ctx = canvas.getContext('2d');
 
+if (window.devicePixelRatio > 1) {
+    canvas.style.width = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
+    canvas.width = canvas.width * 2;
+    canvas.height = canvas.height * 2;
+    ctx.scale(2, 2);
+}
+
 function randBox(size) {
     var x = Math.random() * (W - size),
         y = Math.random() * (W - size);
@@ -35,7 +43,7 @@ function randClusterBox(cluster, dist, size) {
     ];
 }
 
-var colors = ['#f40', '#37f', '#0b0'],
+var colors = ['#f40', '#0b0', '#37f'],
     rects;
 
 function drawTree(node, level) {
@@ -43,11 +51,11 @@ function drawTree(node, level) {
 
     var rect = [];
 
-    rect.push(level ? colors[(level - 1) % colors.length] : 'grey');
-    rect.push(level ? 1 / level : 1);
+    rect.push(level ? colors[(node.height - 1) % colors.length] : 'grey');
+    rect.push(level ? 1 / Math.pow(level, 1.2) : 0.2);
     rect.push([
-        Math.round(node.bbox[0]) + 0.5,
-        Math.round(node.bbox[1]) + 0.5,
+        Math.round(node.bbox[0]),
+        Math.round(node.bbox[1]),
         Math.round(node.bbox[2] - node.bbox[0]),
         Math.round(node.bbox[3] - node.bbox[1])
     ]);
@@ -66,8 +74,7 @@ function draw() {
     rects = [];
     drawTree(tree.data, 0);
 
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, W + 1, W + 1);
+    ctx.clearRect(0, 0, W + 1, W + 1);
 
     for (var i = rects.length - 1; i >= 0; i--) {
         ctx.strokeStyle = rects[i][0];

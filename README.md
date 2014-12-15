@@ -31,12 +31,12 @@ Performed with Node.js v0.10.22 on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
 ---------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 8.87s  | 14.6s  | 1.6x
-1000 searches of 0.01% area  | 0.09s  | 2.54s  | 28x
-1000 searches of 1% area     | 0.71s  | 5.08s  | 7x
-1000 searches of 10% area    | 3.04s  | 17.1s  | 5.6x
-remove 1000 items one by one | 0.03s  | 3.32s  | 110x
-bulk insert 1M items         | 3.53s  | n/a    | 4x
+insert 1M items one by one   | 6.18s  | 16.46s | 2.7x
+1000 searches of 0.01% area  | 0.07s  | 2.52s  | 35x
+1000 searches of 1% area     | 0.53s  | 5.03s  | 9.6x
+1000 searches of 10% area    | 2.45s  | 16.76s | 6.8x
+remove 1000 items one by one | 0.03s  | 3.2s   | 118x
+bulk-insert 1M items         | 1.99s  | n/a    | 8.3x
 
 ## Usage
 
@@ -145,7 +145,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
-* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading)
+* bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading) combined with Floyd–Rivest selection algorithm
 * bulk insertion: STLT algorithm (Small-Tree-Large-Tree)
 * search: standard non-recursive R-tree search
 
@@ -155,7 +155,7 @@ e.g. first indexing the data on the server and and then importing the resulting 
 * [The R*-tree: An Efficient and Robust Access Method for Points and Rectangles+](http://dbs.mathematik.uni-marburg.de/publications/myPapers/1990/BKSS90.pdf)
 * [OMT: Overlap Minimizing Top-down Bulk Loading Algorithm for R-tree](http://ftp.informatik.rwth-aachen.de/Publications/CEUR-WS/Vol-74/files/FORUM_18.pdf)
 * [Bulk Insertions into R-Trees Using the Small-Tree-Large-Tree Approach](http://www.cs.arizona.edu/~bkmoon/papers/dke06-bulk.pdf)
-* [R-Trees: Theory and Applications (book)](http://metro-natshar-31-71.brain.net.pk/articles/1852339772.pdf)
+* [R-Trees: Theory and Applications (book)](http://www.apress.com/9781852339777)
 
 ## Development
 
@@ -168,6 +168,17 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 ```
 
 ## Changelog
+
+#### 1.3.4 &mdash; Aug 31, 2014
+
+- Improved bulk insertion performance for a large number of items (e.g. up to 100% for inserting a million items).
+- Fixed performance regression for high node sizes.
+
+#### 1.3.3 &mdash; Aug 30, 2014
+
+- Improved bulk insertion performance by ~60-70%.
+- Improved insertion performance by ~40%.
+- Improved search performance by ~30%.
 
 #### 1.3.2 &mdash; Nov 25, 2013
 
