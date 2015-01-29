@@ -1,3 +1,7 @@
+'use strict';
+
+/*eslint key-spacing: 0, comma-spacing: 0, quotes: 0*/
+
 var rbush = require('../rbush.js'),
     t = require('tape');
 
@@ -82,7 +86,7 @@ t('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data str
 
     tree.load(data);
 
-    function byLngLat (a, b) {
+    function byLngLat(a, b) {
         return a.minLng - b.minLng || a.minLat - b.minLat;
     }
 

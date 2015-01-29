@@ -19,27 +19,51 @@
   "main": "rbush.js",
   "devDependencies": {
     "benchmark": "^1.0.0",
+    "eslint": "^0.13.0",
     "faucet": "0.0.1",
     "istanbul": "~0.3.2",
-    "jshint": "^2.5.10",
     "rtree": "~1.4.2",
     "tape": "^3.0.3"
   },
   "scripts": {
-    "test": "jshint rbush.js test/test.js && node test/test.js | faucet",
+    "test": "eslint rbush.js test/test.js && node test/test.js | faucet",
     "perf": "node ./debug/perf.js",
     "cov": "istanbul cover test/test.js -x test/test.js"
   },
-  "jshintConfig": {
-    "unused": "true",
-    "undef": true,
-    "trailing": true,
-    "eqeqeq": true,
-    "es3": true,
-    "indent": 4,
-    "node": true,
-    "browser": true,
-    "worker": true,
+  "eslintConfig": {
+    "rules": {
+      "no-use-before-define": [
+        2,
+        "nofunc"
+      ],
+      "camelcase": 2,
+      "space-after-function-name": 2,
+      "space-in-parens": 2,
+      "space-before-blocks": 2,
+      "space-after-keywords": 2,
+      "comma-style": 2,
+      "no-lonely-if": 2,
+      "no-else-return": 2,
+      "no-empty": 2,
+      "no-new": 2,
+      "key-spacing": 2,
+      "no-multi-spaces": 2,
+      "space-in-brackets": 2,
+      "quotes": [
+        2,
+        "single"
+      ],
+      "new-cap": 0,
+      "no-new-func": 0,
+      "curly": 0,
+      "no-underscore-dangle": 0,
+      "no-constant-condition": 0,
+      "no-shadow": 0
+    },
+    "env": {
+      "node": true,
+      "browser": true
+    },
     "globals": {
       "define": false
     }
