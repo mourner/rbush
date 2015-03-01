@@ -181,6 +181,44 @@ t('#load properly merges data of smaller or bigger tree heights', function (t) {
     t.end();
 });
 
+t('#nearest finds nearest point in the tree given a point object', function(t) {
+    var tree = rbush(4).load(data);
+    var result = tree.nearest({x:5,y:5});
+
+    sortedEqual(t, result, [0,0,0,0]);
+
+    result = tree.nearest({x:6,y:5});
+    sortedEqual(t, result, [10,10,10,10]);
+
+    result = tree.nearest({x:46,y:45});
+    sortedEqual(t, result, [45,45,45,45]);
+
+    t.end();
+});
+
+t('#nearest finds nearest point in the tree given a point array', function(t) {
+    var tree = rbush(4).load(data);
+    var result = tree.nearest([5,5]);
+
+    sortedEqual(t, result, [0,0,0,0]);
+
+    result = tree.nearest({x:6,y:5});
+    sortedEqual(t, result, [10,10,10,10]);
+
+    result = tree.nearest({x:46,y:45});
+    sortedEqual(t, result, [45,45,45,45]);
+    
+    t.end();
+});
+
+t('#nearest throws exception for other arguments', function(t) {
+    var tree = rbush(4).load(data);
+    t.throws(function() {
+        tree.nearest('test invalid argument');    
+    });
+    t.end();
+});
+
 t('#search finds matching points in the tree given a bbox', function (t) {
 
     var tree = rbush(4).load(data);
