@@ -57,6 +57,34 @@ rbush.prototype = {
         return result;
     },
 
+    collides: function (bbox) {
+
+        var node = this.data,
+            toBBox = this.toBBox;
+
+        if (!intersects(bbox, node.bbox)) return false;
+
+        var nodesToSearch = [],
+            i, len, child, childBBox;
+
+        while (node) {
+            for (i = 0, len = node.children.length; i < len; i++) {
+
+                child = node.children[i];
+                childBBox = node.leaf ? toBBox(child) : child.bbox;
+
+                if (intersects(bbox, childBBox)) {
+					if (node.leaf) return true;
+					else if (contains(bbox, childBBox)) return true;
+					else nodesToSearch.push(child);
+				}
+            }
+            node = nodesToSearch.pop();
+        }
+
+        return false;
+    },
+
     load: function (data) {
         if (!(data && data.length)) return this;
 
