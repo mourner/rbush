@@ -74,10 +74,11 @@ rbush.prototype = {
                 childBBox = node.leaf ? toBBox(child) : child.bbox;
 
                 if (intersects(bbox, childBBox)) {
-					if (node.leaf) return true;
-					else if (contains(bbox, childBBox)) return true;
-					else nodesToSearch.push(child);
-				}
+                    if (node.leaf || contains(bbox, childBBox)) {
+                        return true;
+                    }
+                    nodesToSearch.push(child);
+                }
             }
             node = nodesToSearch.pop();
         }

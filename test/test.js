@@ -194,10 +194,27 @@ t('#search finds matching points in the tree given a bbox', function (t) {
     t.end();
 });
 
+t('#collides returns true when search finds matching points', function (t) {
+
+    var tree = rbush(4).load(data);
+    var result = tree.collides([40, 20, 80, 70]);
+
+	t.same(result, true);
+
+    t.end();
+});
+
 t('#search returns an empty array if nothing found', function (t) {
     var result = rbush(4).load(data).search([200, 200, 210, 210]);
 
     t.same(result, []);
+    t.end();
+});
+
+t('#collides returns false if nothing found', function (t) {
+    var result = rbush(4).load(data).collides([200, 200, 210, 210]);
+
+    t.same(result, false);
     t.end();
 });
 
