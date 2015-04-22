@@ -131,10 +131,10 @@ Returns all items of the tree.
 ### Collisions
 
 ```js
-var hitSomething = tree.collides([40, 20, 80, 70]);
+var result = tree.collides([40, 20, 80, 70]);
 ```
 
-Like `search()`, but returns a boolean value.
+Returns `true` if there are any items in the given bounding box, otherwise `false`.
 
 
 ### Export and Import
@@ -177,6 +177,10 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 ```
 
 ## Changelog
+
+#### 1.4.0 &mdash; Apr 22, 2014
+
+- Added `collides` method for fast collision detection.
 
 #### 1.3.4 &mdash; Aug 31, 2014
 

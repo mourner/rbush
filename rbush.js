@@ -74,9 +74,7 @@ rbush.prototype = {
                 childBBox = node.leaf ? toBBox(child) : child.bbox;
 
                 if (intersects(bbox, childBBox)) {
-                    if (node.leaf || contains(bbox, childBBox)) {
-                        return true;
-                    }
+                    if (node.leaf || contains(bbox, childBBox)) return true;
                     nodesToSearch.push(child);
                 }
             }
@@ -558,7 +556,8 @@ function multiSelect(arr, left, right, n, compare) {
     }
 }
 
-// sort array between left and right (inclusive) so that the smallest k elements come first (unordered)
+// Floyd-Rivest selection algorithm:
+// sort an array between left and right (inclusive) so that the smallest k elements come first (unordered)
 function select(arr, left, right, k, compare) {
     var n, i, z, s, sd, newLeft, newRight, t, j;
 
