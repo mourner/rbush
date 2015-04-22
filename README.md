@@ -128,6 +128,15 @@ var allItems = tree.all();
 
 Returns all items of the tree.
 
+### Collisions
+
+```js
+var hitSomething = tree.collides([40, 20, 80, 70]);
+```
+
+Like `search()`, but returns a boolean value.
+
+
 ### Export and Import
 
 ```js
