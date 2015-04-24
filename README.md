@@ -150,6 +150,11 @@ var tree = rbush(9).fromJSON(treeData);
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
 e.g. first indexing the data on the server and and then importing the resulting tree data on the client for searching.
 
+## K-Nearest Neighbors
+
+For "_k_ nearest neighbors around a point" type of queries for RBush,
+check out [rbush-knn](https://github.com/mourner/rbush-knn).
+
 ## Algorithms Used
 
 * single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
@@ -178,7 +183,7 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 
 ## Changelog
 
-#### 1.4.0 &mdash; Apr 22, 2014
+#### 1.4.0 &mdash; Apr 22, 2015
 
 - Added `collides` method for fast collision detection.
 
