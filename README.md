@@ -150,7 +150,7 @@ var tree = rbush(9).fromJSON(treeData);
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
 e.g. first indexing the data on the server and and then importing the resulting tree data on the client for searching.
 
-## K-Nearest Neighbors
+### K-Nearest Neighbors
 
 For "_k_ nearest neighbors around a point" type of queries for RBush,
 check out [rbush-knn](https://github.com/mourner/rbush-knn).
