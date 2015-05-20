@@ -181,6 +181,10 @@ npm run perf # run performance benchmarks
 npm run cov  # report test coverage (with more detailed report in coverage/lcov-report/index.html)
 ```
 
+## Limitations
+
+RBush runs on any JavaScript engine compliant with ECMAScript 5 (or higher). This means RBush runs on Node.js and all major browsers, but will not behave properly in Internet Explorer 8.
+
 ## Changelog
 
 #### 1.4.0 &mdash; Apr 22, 2015
