@@ -340,8 +340,10 @@ rbush.prototype = {
 
         this._chooseSplitAxis(node, m, M);
 
+        var splitIndex = this._chooseSplitIndex(node, m, M);
+
         var newNode = {
-            children: node.children.splice(this._chooseSplitIndex(node, m, M)),
+            children: node.children.splice(splitIndex, node.children.length - splitIndex),
             height: node.height
         };
 
