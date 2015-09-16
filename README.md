@@ -134,7 +134,7 @@ Returns all items of the tree.
 var result = tree.collides([40, 20, 80, 70]);
 ```
 
-Returns `true` if there are any items in the given bounding box, otherwise `false`.
+Returns `true` if there are any items intersecting the given bounding box, otherwise `false`.
 
 
 ### Export and Import
@@ -157,7 +157,7 @@ check out [rbush-knn](https://github.com/mourner/rbush-knn).
 
 ## Algorithms Used
 
-* single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R*-tree (split is very effective in JS, while other R*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
+* single insertion: non-recursive R-tree insertion with overlap minimizing split routine from R\*-tree (split is very effective in JS, while other R\*-tree modifications like reinsertion on overflow and overlap minimizing subtree search are too slow and not worth it)
 * single deletion: non-recursive R-tree deletion using depth-first tree traversal with free-at-empty strategy (entries in underflowed nodes are not reinserted, instead underflowed nodes are kept in the tree and deleted only when empty, which is a good compromise of query vs removal performance)
 * bulk loading: OMT algorithm (Overlap Minimizing Top-down Bulk Loading) combined with Floyd–Rivest selection algorithm
 * bulk insertion: STLT algorithm (Small-Tree-Large-Tree)
