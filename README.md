@@ -187,6 +187,10 @@ RBush should run on Node and all major browsers. The only caveat: IE 8 needs an 
 
 ## Changelog
 
+#### 1.4.1 &mdash; Sep 16, 2015
+
+- Fixed insertion in IE8.
+
 #### 1.4.0 &mdash; Apr 22, 2015
 
 - Added `collides` method for fast collision detection.
