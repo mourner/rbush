@@ -27,16 +27,16 @@ click to perform search under the cursor.
 The following sample performance test was done by generating
 random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
 (see `debug/perf.js` script).
-Performed with Node.js v0.10.22 on a Retina Macbook Pro 15 (mid-2012).
+Performed with Node.js v5.2.0 on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
 ---------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 6.18s  | 16.46s | 2.7x
-1000 searches of 0.01% area  | 0.07s  | 2.52s  | 35x
-1000 searches of 1% area     | 0.53s  | 5.03s  | 9.6x
-1000 searches of 10% area    | 2.45s  | 16.76s | 6.8x
-remove 1000 items one by one | 0.03s  | 3.2s   | 118x
-bulk-insert 1M items         | 1.99s  | n/a    | 8.3x
+insert 1M items one by one   | 4.7s   | 9.26s  | 2x
+1000 searches of 0.01% area  | 0.06s  | 1.12s  | 20x
+1000 searches of 1% area     | 0.43s  | 2.73s  | 6.3x
+1000 searches of 10% area    | 2.19s  | 11.56s | 5.3x
+remove 1000 items one by one | 0.02s  | 1.44s  | 65x
+bulk-insert 1M items         | 1.38s  | n/a    | 6.7x
 
 ## Usage
 
@@ -186,6 +186,10 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 RBush should run on Node and all major browsers. The only caveat: IE 8 needs an [Array#indexOf polyfill](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf#Polyfill) for `remove` method to work.
 
 ## Changelog
+
+#### 1.4.2 &mdash; Dec 16, 2015
+
+- 50% faster insertion.
 
 #### 1.4.1 &mdash; Sep 16, 2015
 
