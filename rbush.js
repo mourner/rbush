@@ -185,8 +185,8 @@ rbush.prototype = {
 
     toBBox: function (item) { return item; },
 
-    compareMinX: function (a, b) { return a[0] - b[0]; },
-    compareMinY: function (a, b) { return a[1] - b[1]; },
+    compareMinX: function (a, b) { return a.x - b.x; },
+    compareMinY: function (a, b) { return a.y - b.y; },
 
     toJSON: function () { return this.data; },
 
@@ -471,7 +471,10 @@ rbush.prototype = {
         this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
         this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
 
-        this.toBBox = new Function('a', 'return [a' + format.join(', a') + '];');
+        this.toBBox = new Function('a', 'return {x: a' + format[0] +
+            ', y: a' + format[1] +
+            ', x2: a' + format[2] +
+            ', y2: a' + format[3] + '};');
     }
 };
 
@@ -493,49 +496,56 @@ function distBBox(node, k, p, toBBox) {
     return bbox;
 }
 
-function empty() { return [Infinity, Infinity, -Infinity, -Infinity]; }
+function empty() {
+    return {
+        x: Infinity,
+        y: Infinity,
+        x2: -Infinity,
+        y2: -Infinity
+    };
+}
 
 function extend(a, b) {
-    a[0] = Math.min(a[0], b[0]);
-    a[1] = Math.min(a[1], b[1]);
-    a[2] = Math.max(a[2], b[2]);
-    a[3] = Math.max(a[3], b[3]);
+    a.x = Math.min(a.x, b.x);
+    a.y = Math.min(a.y, b.y);
+    a.x2 = Math.max(a.x2, b.x2);
+    a.y2 = Math.max(a.y2, b.y2);
     return a;
 }
 
-function compareNodeMinX(a, b) { return a.bbox[0] - b.bbox[0]; }
-function compareNodeMinY(a, b) { return a.bbox[1] - b.bbox[1]; }
+function compareNodeMinX(a, b) { return a.bbox.x - b.bbox.x; }
+function compareNodeMinY(a, b) { return a.bbox.y - b.bbox.y; }
 
-function bboxArea(a)   { return (a[2] - a[0]) * (a[3] - a[1]); }
-function bboxMargin(a) { return (a[2] - a[0]) + (a[3] - a[1]); }
+function bboxArea(a)   { return (a.x2 - a.x) * (a.y2 - a.y); }
+function bboxMargin(a) { return (a.x2 - a.x) + (a.y2 - a.y); }
 
 function enlargedArea(a, b) {
-    return (Math.max(b[2], a[2]) - Math.min(b[0], a[0])) *
-           (Math.max(b[3], a[3]) - Math.min(b[1], a[1]));
+    return (Math.max(b.x2, a.x2) - Math.min(b.x, a.x)) *
+           (Math.max(b.y2, a.y2) - Math.min(b.y, a.y));
 }
 
 function intersectionArea(a, b) {
-    var minX = Math.max(a[0], b[0]),
-        minY = Math.max(a[1], b[1]),
-        maxX = Math.min(a[2], b[2]),
-        maxY = Math.min(a[3], b[3]);
+    var minX = Math.max(a.x, b.x),
+        minY = Math.max(a.y, b.y),
+        maxX = Math.min(a.x2, b.x2),
+        maxY = Math.min(a.y2, b.y2);
 
     return Math.max(0, maxX - minX) *
            Math.max(0, maxY - minY);
 }
 
 function contains(a, b) {
-    return a[0] <= b[0] &&
-           a[1] <= b[1] &&
-           b[2] <= a[2] &&
-           b[3] <= a[3];
+    return a.x <= b.x &&
+           a.y <= b.y &&
+           b.x2 <= a.x2 &&
+           b.y2 <= a.y2;
 }
 
 function intersects(a, b) {
-    return b[0] <= a[2] &&
-           b[1] <= a[3] &&
-           b[2] >= a[0] &&
-           b[3] >= a[1];
+    return b.x <= a.x2 &&
+           b.y <= a.y2 &&
+           b.x2 >= a.x &&
+           b.y2 >= a.y;
 }
 
 // sort an array so that items come in groups of n unsorted items, with groups sorted between each other;

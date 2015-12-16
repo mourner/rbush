@@ -9,9 +9,12 @@ console.log('maxFill: ' + maxFill);
 function randBox(size) {
     var x = Math.random() * (100 - size),
         y = Math.random() * (100 - size);
-    return [x, y,
-        x + size * Math.random(),
-        y + size * Math.random()];
+    return {
+        x: x,
+        y: y,
+        x2: x + size * Math.random(),
+        y2: y + size * Math.random()
+    };
 }
 
 function genData(N, size) {
