@@ -4,7 +4,8 @@
  https://github.com/mourner/rbush
 */
 
-(function () { 'use strict';
+(function () {
+'use strict';
 
 function rbush(maxEntries, format) {
 
@@ -612,7 +613,7 @@ function swap(arr, i, j) {
 
 
 // export as AMD/CommonJS module or global variable
-if (typeof define === 'function' && define.amd) define('rbush', function() { return rbush; });
+if (typeof define === 'function' && define.amd) define('rbush', function () { return rbush; });
 else if (typeof module !== 'undefined') module.exports = rbush;
 else if (typeof self !== 'undefined') self.rbush = rbush;
 else window.rbush = rbush;

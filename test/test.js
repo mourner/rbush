@@ -218,7 +218,7 @@ t('#collides returns false if nothing found', function (t) {
     t.end();
 });
 
-t('#all returns all points in the tree', function(t) {
+t('#all returns all points in the tree', function (t) {
 
     var tree = rbush(4).load(data);
     var result = tree.all();
