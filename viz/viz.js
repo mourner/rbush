@@ -51,10 +51,10 @@ function drawTree(node, level) {
     rect.push(level ? colors[(node.height - 1) % colors.length] : 'grey');
     rect.push(level ? 1 / Math.pow(level, 1.2) : 0.2);
     rect.push([
-        Math.round(node.bbox.x),
-        Math.round(node.bbox.y),
-        Math.round(node.bbox.x2 - node.bbox.x),
-        Math.round(node.bbox.y2 - node.bbox.y)
+        Math.round(node.x),
+        Math.round(node.y),
+        Math.round(node.x2 - node.x),
+        Math.round(node.y2 - node.y)
     ]);
 
     rects.push(rect);
