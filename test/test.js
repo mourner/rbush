@@ -263,7 +263,8 @@ t('#insert adds an item to an existing tree correctly', function (t) {
             {'children':[[1,1,2,2],[2,2,2,2],[3,3,3,3]],'height':1,'leaf':true,'bbox':[1,1,3,3]}
         ],
         'height':2,
-        'bbox':[0,0,3,3]
+        'bbox':[0,0,3,3],
+        'leaf':false
     });
     t.end();
 });
