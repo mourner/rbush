@@ -1,9 +1,8 @@
 RBush
 =====
 
-RBush is a high-performance JavaScript library for 2D **spatial indexing** of points and rectangles
-by [Vladimir Agafonkin](http://github.com/mourner),
-based on an optimized **R-tree** data structure with **bulk insertion** support.
+RBush is a high-performance JavaScript library for 2D **spatial indexing** of points and rectangles.
+It's based on an optimized **R-tree** data structure with **bulk insertion** support.
 
 *Spatial index* is a special data structure for points and rectangles
 that allows you to perform queries like "all items within this bounding box" very efficiently
@@ -22,22 +21,6 @@ click to perform search under the cursor.
 
 * [uniformly distributed random data](http://mourner.github.io/rbush/viz/viz-uniform.html)
 * [randomly clustered data](http://mourner.github.io/rbush/viz/viz-cluster.html)
-
-## Performance
-
-The following sample performance test was done by generating
-random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
-(see `debug/perf.js` script).
-Performed with Node.js v5.2.0 on a Retina Macbook Pro 15 (mid-2012).
-
-Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
----------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 4.7s   | 9.26s  | 2x
-1000 searches of 0.01% area  | 0.06s  | 1.12s  | 20x
-1000 searches of 1% area     | 0.43s  | 2.73s  | 6.3x
-1000 searches of 10% area    | 2.19s  | 11.56s | 5.3x
-remove 1000 items one by one | 0.02s  | 1.44s  | 65x
-bulk-insert 1M items         | 1.38s  | n/a    | 6.7x
 
 ## Usage
 
@@ -155,6 +138,22 @@ e.g. first indexing the data on the server and and then importing the resulting 
 
 For "_k_ nearest neighbors around a point" type of queries for RBush,
 check out [rbush-knn](https://github.com/mourner/rbush-knn).
+
+## Performance
+
+The following sample performance test was done by generating
+random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
+(see `debug/perf.js` script).
+Performed with Node.js v5.2.0 on a Retina Macbook Pro 15 (mid-2012).
+
+Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
+---------------------------- | ------ | ------ | ----
+insert 1M items one by one   | 4.7s   | 9.26s  | 2x
+1000 searches of 0.01% area  | 0.06s  | 1.12s  | 20x
+1000 searches of 1% area     | 0.43s  | 2.73s  | 6.3x
+1000 searches of 10% area    | 2.19s  | 11.56s | 5.3x
+remove 1000 items one by one | 0.02s  | 1.44s  | 65x
+bulk-insert 1M items         | 1.38s  | n/a    | 6.7x
 
 ## Algorithms Used
 
