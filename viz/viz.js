@@ -14,10 +14,10 @@ function randBox(size) {
     var x = Math.random() * (W - size),
         y = Math.random() * (W - size);
     return {
-        x: x,
-        y: y,
-        x2: x + size * Math.random(),
-        y2: y + size * Math.random()
+        minX: x,
+        minY: y,
+        maxX: x + size * Math.random(),
+        maxY: y + size * Math.random()
     };
 }
 
@@ -32,10 +32,10 @@ function randClusterBox(cluster, dist, size) {
         y = cluster.y - dist + 2 * dist * (Math.random() + Math.random() + Math.random()) / 3;
 
     return {
-        x: x,
-        y: y,
-        x2: x + size * Math.random(),
-        y2: y + size * Math.random(),
+        minX: x,
+        minY: y,
+        maxX: x + size * Math.random(),
+        maxY: y + size * Math.random(),
         item: true
     };
 }
@@ -51,10 +51,10 @@ function drawTree(node, level) {
     rect.push(level ? colors[(node.height - 1) % colors.length] : 'grey');
     rect.push(level ? 1 / Math.pow(level, 1.2) : 0.2);
     rect.push([
-        Math.round(node.x),
-        Math.round(node.y),
-        Math.round(node.x2 - node.x),
-        Math.round(node.y2 - node.y)
+        Math.round(node.minX),
+        Math.round(node.minY),
+        Math.round(node.maxX - node.minX),
+        Math.round(node.maxY - node.minY)
     ]);
 
     rects.push(rect);
@@ -83,10 +83,10 @@ function draw() {
 function search(e) {
     console.time('1 pixel search');
     tree.search({
-        x: e.clientX,
-        y: e.clientY,
-        x2: e.clientX + 1,
-        y2: e.clientY + 1
+        minX: e.clientX,
+        minY: e.clientY,
+        maxX: e.clientX + 1,
+        maxY: e.clientY + 1
     });
     console.timeEnd('1 pixel search');
 }

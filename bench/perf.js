@@ -10,10 +10,10 @@ function randBox(size) {
     var x = Math.random() * (100 - size),
         y = Math.random() * (100 - size);
     return {
-        x: x,
-        y: y,
-        x2: x + size * Math.random(),
-        y2: y + size * Math.random()
+        minX: x,
+        minY: y,
+        maxX: x + size * Math.random(),
+        maxY: y + size * Math.random()
     };
 }
 

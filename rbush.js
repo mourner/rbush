@@ -450,10 +450,11 @@ rbush.prototype = {
         this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
         this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
 
-        this.toBBox = new Function('a', 'return {x: a' + format[0] +
-            ', y: a' + format[1] +
-            ', x2: a' + format[2] +
-            ', y2: a' + format[3] + '};');
+        this.toBBox = new Function('a',
+            'return {minX: a' + format[0] +
+            ', minY: a' + format[1] +
+            ', maxX: a' + format[2] +
+            ', maxY: a' + format[3] + '};');
     }
 };
 
@@ -477,62 +478,62 @@ function distBBox(node, k, p, toBBox, destNode) {
 
 function empty() {
     return {
-        x: Infinity,
-        y: Infinity,
-        x2: -Infinity,
-        y2: -Infinity
+        minX: Infinity,
+        minY: Infinity,
+        maxX: -Infinity,
+        maxY: -Infinity
     };
 }
 
 function setEmptyBBox(bbox) {
-    bbox.x = Infinity;
-    bbox.y = Infinity;
-    bbox.x2 = -Infinity;
-    bbox.y2 = -Infinity;
+    bbox.minX = Infinity;
+    bbox.minY = Infinity;
+    bbox.maxX = -Infinity;
+    bbox.maxY = -Infinity;
     return bbox;
 }
 
 function extend(a, b) {
-    a.x = Math.min(a.x, b.x);
-    a.y = Math.min(a.y, b.y);
-    a.x2 = Math.max(a.x2, b.x2);
-    a.y2 = Math.max(a.y2, b.y2);
+    a.minX = Math.min(a.minX, b.minX);
+    a.minY = Math.min(a.minY, b.minY);
+    a.maxX = Math.max(a.maxX, b.maxX);
+    a.maxY = Math.max(a.maxY, b.maxY);
     return a;
 }
 
-function compareNodeMinX(a, b) { return a.x - b.x; }
-function compareNodeMinY(a, b) { return a.y - b.y; }
+function compareNodeMinX(a, b) { return a.minX - b.minX; }
+function compareNodeMinY(a, b) { return a.minY - b.minY; }
 
-function bboxArea(a)   { return (a.x2 - a.x) * (a.y2 - a.y); }
-function bboxMargin(a) { return (a.x2 - a.x) + (a.y2 - a.y); }
+function bboxArea(a)   { return (a.maxX - a.minX) * (a.maxY - a.minY); }
+function bboxMargin(a) { return (a.maxX - a.minX) + (a.maxY - a.minY); }
 
 function enlargedArea(a, b) {
-    return (Math.max(b.x2, a.x2) - Math.min(b.x, a.x)) *
-           (Math.max(b.y2, a.y2) - Math.min(b.y, a.y));
+    return (Math.max(b.maxX, a.maxX) - Math.min(b.minX, a.minX)) *
+           (Math.max(b.maxY, a.maxY) - Math.min(b.minY, a.minY));
 }
 
 function intersectionArea(a, b) {
-    var minX = Math.max(a.x, b.x),
-        minY = Math.max(a.y, b.y),
-        maxX = Math.min(a.x2, b.x2),
-        maxY = Math.min(a.y2, b.y2);
+    var minX = Math.max(a.minX, b.minX),
+        minY = Math.max(a.minY, b.minY),
+        maxX = Math.min(a.maxX, b.maxX),
+        maxY = Math.min(a.maxY, b.maxY);
 
     return Math.max(0, maxX - minX) *
            Math.max(0, maxY - minY);
 }
 
 function contains(a, b) {
-    return a.x <= b.x &&
-           a.y <= b.y &&
-           b.x2 <= a.x2 &&
-           b.y2 <= a.y2;
+    return a.minX <= b.minX &&
+           a.minY <= b.minY &&
+           b.maxX <= a.maxX &&
+           b.maxY <= a.maxY;
 }
 
 function intersects(a, b) {
-    return b.x <= a.x2 &&
-           b.y <= a.y2 &&
-           b.x2 >= a.x &&
-           b.y2 >= a.y;
+    return b.minX <= a.maxX &&
+           b.minY <= a.maxY &&
+           b.maxX >= a.minX &&
+           b.maxY >= a.minY;
 }
 
 function createNode(children) {
@@ -540,10 +541,10 @@ function createNode(children) {
         children: children,
         height: 1,
         leaf: true,
-        x: Infinity,
-        y: Infinity,
-        x2: -Infinity,
-        y2: -Infinity
+        minX: Infinity,
+        minY: Infinity,
+        maxX: -Infinity,
+        maxY: -Infinity
     };
 }
 
