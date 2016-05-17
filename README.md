@@ -187,6 +187,10 @@ RBush should run on Node and all major browsers. The only caveat: IE 8 needs an 
 
 ## Changelog
 
+#### 1.4.3 &mdash; May 17, 2016
+
+- Fixed an error when inserting many empty bounding boxes.
+
 #### 1.4.2 &mdash; Dec 16, 2015
 
 - 50% faster insertion.
