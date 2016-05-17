@@ -300,7 +300,7 @@ rbush.prototype = {
                 }
             }
 
-            node = targetNode;
+            node = targetNode || node.children[0];
         }
 
         return node;

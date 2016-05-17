@@ -25,6 +25,10 @@ var data = [[0,0,0,0],[10,10,10,10],[20,20,20,20],[25,0,25,0],[35,10,35,10],[45,
     [20,95,20,95],[25,75,25,75],[35,85,35,85],[45,95,45,95],[50,50,50,50],[60,60,60,60],[70,70,70,70],[75,50,75,50],
     [85,60,85,60],[95,70,95,70],[50,75,50,75],[60,85,60,85],[70,95,70,95],[75,75,75,75],[85,85,85,85],[95,95,95,95]];
 
+var emptyData = [[-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity],
+    [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity],
+    [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity]];
+
 var testTree = {"children":[{
     "children":[
         {"children":[[0,0,0,0],[10,10,10,10],[20,20,20,20],[25,0,25,0]],"height":1,"bbox":[0,0,25,20],"leaf":true},
@@ -148,6 +152,29 @@ t('#load does nothing if loading empty data', function (t) {
     var tree = rbush().load([]);
 
     t.same(tree.toJSON(), rbush().toJSON());
+    t.end();
+});
+
+t('#load handles the insertion of maxEntries + 2 empty bboxes', function (t) {
+    var tree = rbush(4)
+        .load(emptyData);
+
+    t.equal(tree.toJSON().height, 2);
+    sortedEqual(t, tree.all(), emptyData);
+
+    t.end();
+});
+
+t('#insert handles the insertion of maxEntries + 2 empty bboxes', function (t) {
+    var tree = rbush(4);
+
+    emptyData.forEach(function (datum) {
+        tree.insert(datum);
+    });
+
+    t.equal(tree.toJSON().height, 2);
+    sortedEqual(t, tree.all(), emptyData);
+
     t.end();
 });
 
