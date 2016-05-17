@@ -8,8 +8,6 @@
 'use strict';
 
 function rbush(maxEntries, format) {
-
-    // jshint newcap: false, validthis: true
     if (!(this instanceof rbush)) return new rbush(maxEntries, format);
 
     // max entries in a node is 9 by default; min node fill is 40% for best performance
@@ -467,8 +465,6 @@ rbush.prototype = {
         // uses eval-type function compilation instead of just accepting a toBBox function
         // because the algorithms are very sensitive to sorting functions performance,
         // so they should be dead simple and without inner calls
-
-        // jshint evil: true
 
         var compareArr = ['return a', ' - b', ';'];
 

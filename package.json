@@ -20,15 +20,16 @@
     "type": "git",
     "url": "git://github.com/mourner/rbush.git"
   },
+  "license": "MIT",
   "main": "rbush.js",
   "devDependencies": {
-    "benchmark": "^1.0.0",
-    "eslint": "^1.10.3",
-    "eslint-config-mourner": "^1.0.1",
+    "benchmark": "^2.1.0",
+    "eslint": "^2.10.2",
+    "eslint-config-mourner": "^2.0.1",
     "faucet": "0.0.1",
-    "istanbul": "~0.4.1",
+    "istanbul": "~0.4.3",
     "rtree": "~1.4.2",
-    "tape": "^4.0.0"
+    "tape": "^4.5.1"
   },
   "scripts": {
     "test": "eslint rbush.js test/test.js && node test/test.js | faucet",
@@ -40,7 +41,8 @@
     "rules": {
       "indent": 0,
       "strict": 0,
-      "new-cap": 0
+      "new-cap": 0,
+      "consistent-return": 0
     },
     "env": {
       "amd": true
