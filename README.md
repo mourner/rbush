@@ -34,14 +34,22 @@ An optional argument to `rbush` defines the maximum number of entries in a tree 
 It drastically affects the performance, so you should adjust it
 considering the type of data and search queries you perform.
 
-### Adding and Removing Data
+### Adding Data
 
 Insert an item:
 
 ```js
-var item = [20, 40, 30, 50]; // [x1, y1, x2, y2]
+var item = {
+    minX: 20,
+    minY: 40,
+    maxX: 30,
+    maxY: 50,
+    foo: 'bar'
+};
 tree.insert(item);
 ```
+
+### Removing Data
 
 Remove a previously inserted item:
 
@@ -49,33 +57,31 @@ Remove a previously inserted item:
 tree.remove(item);
 ```
 
-Clear all items:
+By default, RBush removes objects by reference.
+However, you can pass a custom `equals` function to compare by value for removal,
+which is useful when you only have a copy of the object you need removed (e.g. loaded from server):
+
+```js
+tree.remove(itemCopy, function (a, b) {
+    return a.id === b.id;
+});
+
+Remove all items:
 
 ```js
 tree.clear();
 ```
 
-Items inserted in the tree can have other arbitrary properties/elements that you can access later:
-
-```js
-var item1 = [20, 40, 30, 50, {foo: 'bar'}];
-tree.insert(item1);
-
-var item2 = [15, 15, 30, 30];
-item2.foo = 'bar';
-tree.insert(item2);
-```
-
 ### Data Format
 
-By default, RBush assumes the format of data points to be `[minX, minY, maxX, maxY]`
-(bounding box coordinates, or just `[x, y, x, y]` for points).
-You can customize this by providing an array with `minX`, `minY`, `maxX`, `maxY` accessor strings
+By default, RBush assumes the format of data points to be an object
+with `minX`, `minY`, `maxX` and `maxY` properties.
+You can customize this by providing an array with corresponding accessor strings
 as a second argument to `rbush` like this:
 
 ```js
-var tree = rbush(9, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
-tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
+var tree = rbush(9, ['[0]', '[1]', '[0]', '[1]']); // accept [x, y] points
+tree.insert([20, 50]);
 ```
 
 ### Bulk-Inserting Data
@@ -83,28 +89,35 @@ tree.insert({id: 'foo', minLng: 30, minLat: 50, maxLng: 40, maxLat: 60});
 Bulk-insert the given data into the tree:
 
 ```js
-tree.load([
-	[10, 10, 15, 20],
-	[12, 15, 40, 64.5],
-	...
-]);
+tree.load([item1, item2, ...]);
 ```
 
 Bulk insertion is usually ~2-3 times faster than inserting items one by one.
-After bulk loading (bulk insertion into an empty tree), subsequent query performance is also ~20-30% better.
+After bulk loading (bulk insertion into an empty tree),
+subsequent query performance is also ~20-30% better.
 
-When you do bulk insertion into an existing tree, it bulk-loads the given data into a separate tree
+Note that when you do bulk insertion into an existing tree,
+it bulk-loads the given data into a separate tree
 and inserts the smaller tree into the larger tree.
-This means that bulk insertion works very well for clustered data (where items are close to each other),
+This means that bulk insertion works very well for clustered data
+(where items in one update are close to each other),
 but makes query performance worse if the data is scattered.
 
 ### Search
 
 ```js
-var result = tree.search([40, 20, 80, 70]);
+var result = tree.search({
+    minX: 40,
+    minY: 20,
+    maxX: 80,
+    maxY: 70
+});
 ```
 
-Returns an array of data items (points or rectangles) that the given bounding box (`[minX, minY, maxX, maxY]`) intersects.
+Returns an array of data items (points or rectangles) that the given bounding box intersects.
+
+Note that the `search` method accepts a bounding box in `{minX, minY, maxX, maxY}` format
+regardless of the format specified in the constructor (which only affects inserted objects).
 
 ```js
 var allItems = tree.all();
@@ -115,7 +128,7 @@ Returns all items of the tree.
 ### Collisions
 
 ```js
-var result = tree.collides([40, 20, 80, 70]);
+var result = tree.collides({minX: 40, minY: 20, maxX: 80, maxY: 70});
 ```
 
 Returns `true` if there are any items intersecting the given bounding box, otherwise `false`.
@@ -134,6 +147,8 @@ var tree = rbush(9).fromJSON(treeData);
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
 e.g. first indexing the data on the server and and then importing the resulting tree data on the client for searching.
 
+Note that the `nodeSize` option passed to the constructor must be the same in both trees for export/import to work properly.
+
 ### K-Nearest Neighbors
 
 For "_k_ nearest neighbors around a point" type of queries for RBush,
@@ -144,16 +159,16 @@ check out [rbush-knn](https://github.com/mourner/rbush-knn).
 The following sample performance test was done by generating
 random uniformly distributed rectangles of ~0.01% area and setting `maxEntries` to `16`
 (see `debug/perf.js` script).
-Performed with Node.js v5.2.0 on a Retina Macbook Pro 15 (mid-2012).
+Performed with Node.js v6.2.2 on a Retina Macbook Pro 15 (mid-2012).
 
 Test                         | RBush  | [old RTree](https://github.com/imbcmdth/RTree) | Improvement
 ---------------------------- | ------ | ------ | ----
-insert 1M items one by one   | 4.7s   | 9.26s  | 2x
-1000 searches of 0.01% area  | 0.06s  | 1.12s  | 20x
-1000 searches of 1% area     | 0.43s  | 2.73s  | 6.3x
-1000 searches of 10% area    | 2.19s  | 11.56s | 5.3x
-remove 1000 items one by one | 0.02s  | 1.44s  | 65x
-bulk-insert 1M items         | 1.38s  | n/a    | 6.7x
+insert 1M items one by one   | 3.18s  | 7.83s  | 2.5x
+1000 searches of 0.01% area  | 0.03s  | 0.93s  | 30x
+1000 searches of 1% area     | 0.35s  | 2.27s  | 6.5x
+1000 searches of 10% area    | 2.18s  | 9.53s  | 4.4x
+remove 1000 items one by one | 0.02s  | 1.18s  | 50x
+bulk-insert 1M items         | 1.25s  | n/a    | 6.7x
 
 ## Algorithms Used
 
@@ -186,6 +201,15 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 RBush should run on Node and all major browsers. The only caveat: IE 8 needs an [Array#indexOf polyfill](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf#Polyfill) for `remove` method to work.
 
 ## Changelog
+
+#### 2.0.0 &mdash; June 29, 2016
+
+- **Breaking:** changed the default format of inserted items from `[20, 40, 30, 50]` to `{minX: 20, minY: 40, maxX: 30, maxY: 50}`.
+- **Breaking:** changed the `search` method argument format from `[20, 40, 30, 50]` to `{minX: 20, minY: 40, maxX: 30, maxY: 50}`.
+- Improved performance by up to 30%.
+- Added `equalsFn` optional argument to `remove` to be able to remove by value rather than by reference.
+- Changed the source code to use CommonJS module format. Browser builds are automatically built and published to NPM.
+- Quickselect algorithm (used internally) is now a [separate module](https://github.com/mourner/quickselect).
 
 #### 1.4.3 &mdash; May 17, 2016
 
