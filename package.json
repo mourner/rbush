@@ -43,5 +43,8 @@
       "new-cap": 0,
       "consistent-return": 0
     }
+  },
+  "dependencies": {
+    "quickselect": "^1.0.0"
   }
 }
