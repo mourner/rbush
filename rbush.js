@@ -129,7 +129,7 @@ rbush.prototype = {
         return this;
     },
 
-    remove: function (item) {
+    remove: function (item, equalsFn) {
         if (!item) return this;
 
         var node = this.data,
@@ -149,7 +149,7 @@ rbush.prototype = {
             }
 
             if (node.leaf) { // check current node
-                index = node.children.indexOf(item);
+                index = findItem(item, node.children, equalsFn);
 
                 if (index !== -1) {
                     // item found, remove the item and condense tree upwards
@@ -458,6 +458,14 @@ rbush.prototype = {
     }
 };
 
+function findItem(item, items, equalsFn) {
+    if (!equalsFn) return items.indexOf(item);
+
+    for (var i = 0; i < items.length; i++) {
+        if (equalsFn(item, items[i])) return i;
+    }
+    return -1;
+}
 
 // calculate node's bbox from bboxes of its children
 function calcBBox(node, toBBox) {

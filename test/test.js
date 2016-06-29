@@ -346,6 +346,19 @@ t('#remove brings the tree to a clear state when removing everything one by one'
     t.same(tree.toJSON(), rbush(4).toJSON());
     t.end();
 });
+t('#remove accepts an equals function', function (t) {
+    var tree = rbush(4).load(data);
+
+    var item = {minX: 20, minY: 70, maxX: 20, maxY: 70, foo: 'bar'};
+
+    tree.insert(item);
+    tree.remove(JSON.parse(JSON.stringify(item)), function (a, b) {
+        return a.foo === b.foo;
+    });
+
+    sortedEqual(t, tree.all(), data);
+    t.end();
+});
 
 t('#clear should clear all the data in the tree', function (t) {
     t.same(
