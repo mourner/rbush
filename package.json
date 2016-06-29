@@ -18,6 +18,7 @@
   "author": "Vladimir Agafonkin",
   "license": "MIT",
   "main": "index.js",
+  "browser": "rbush.js",
   "devDependencies": {
     "benchmark": "^2.1.0",
     "browserify": "^13.0.1",
