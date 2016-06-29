@@ -17,30 +17,31 @@
   ],
   "author": "Vladimir Agafonkin",
   "license": "MIT",
-  "main": "rbush.js",
+  "main": "index.js",
+  "browser": "rbush.js",
   "devDependencies": {
     "benchmark": "^2.1.0",
+    "browserify": "^13.0.1",
     "eslint": "^2.10.2",
     "eslint-config-mourner": "^2.0.1",
     "faucet": "0.0.1",
     "istanbul": "~0.4.3",
-    "tape": "^4.5.1"
+    "tape": "^4.5.1",
+    "uglify-js": "^2.6.4"
   },
   "scripts": {
-    "test": "eslint rbush.js test/test.js && node test/test.js | faucet",
+    "test": "eslint index.js test/test.js && node test/test.js | faucet",
     "perf": "node ./debug/perf.js",
-    "cov": "istanbul cover test/test.js -x test/test.js"
+    "cov": "istanbul cover test/test.js -x test/test.js",
+    "build": "browserify index.js -s rbush -o rbush.js",
+    "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
+    "prepublish": "npm run build && npm run build-min"
   },
   "eslintConfig": {
     "extends": "mourner",
     "rules": {
-      "indent": 0,
-      "strict": 0,
       "new-cap": 0,
       "consistent-return": 0
-    },
-    "env": {
-      "amd": true
     }
   }
 }

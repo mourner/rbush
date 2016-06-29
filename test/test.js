@@ -1,8 +1,8 @@
 'use strict';
 
-/*eslint key-spacing: 0, comma-spacing: 0, quotes: 0*/
+/*eslint key-spacing: 0, comma-spacing: 0 */
 
-var rbush = require('../rbush.js'),
+var rbush = require('..'),
     t = require('tape');
 
 function sortedEqual(t, a, b, compare) {
@@ -223,7 +223,7 @@ t('#collides returns true when search finds matching points', function (t) {
     var tree = rbush(4).load(data);
     var result = tree.collides({minX: 40, minY: 20, maxX: 80, maxY: 70});
 
-	t.same(result, true);
+    t.same(result, true);
 
     t.end();
 });
