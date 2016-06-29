@@ -466,31 +466,18 @@ function calcBBox(node, toBBox) {
 
 // min bounding rectangle of node children from k to p-1
 function distBBox(node, k, p, toBBox, destNode) {
-    var bbox = destNode ? setEmptyBBox(destNode) : empty();
+    if (!destNode) destNode = createNode(null);
+    destNode.minX = Infinity;
+    destNode.minY = Infinity;
+    destNode.maxX = -Infinity;
+    destNode.maxY = -Infinity;
 
     for (var i = k, child; i < p; i++) {
         child = node.children[i];
-        extend(bbox, node.leaf ? toBBox(child) : child);
+        extend(destNode, node.leaf ? toBBox(child) : child);
     }
 
-    return bbox;
-}
-
-function empty() {
-    return {
-        minX: Infinity,
-        minY: Infinity,
-        maxX: -Infinity,
-        maxY: -Infinity
-    };
-}
-
-function setEmptyBBox(bbox) {
-    bbox.minX = Infinity;
-    bbox.minY = Infinity;
-    bbox.maxX = -Infinity;
-    bbox.maxY = -Infinity;
-    return bbox;
+    return destNode;
 }
 
 function extend(a, b) {
