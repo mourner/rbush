@@ -71,6 +71,7 @@ which is useful when you only have a copy of the object you need removed (e.g. l
 tree.remove(itemCopy, function (a, b) {
     return a.id === b.id;
 });
+```
 
 Remove all items:
 
