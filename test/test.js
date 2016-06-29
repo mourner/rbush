@@ -1,8 +1,8 @@
 'use strict';
 
-/*eslint key-spacing: 0, comma-spacing: 0, quotes: 0*/
+/*eslint key-spacing: 0, comma-spacing: 0 */
 
-var rbush = require('../rbush.js'),
+var rbush = require('..'),
     t = require('tape');
 
 function sortedEqual(t, a, b, compare) {

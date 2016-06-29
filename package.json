@@ -17,7 +17,7 @@
   ],
   "author": "Vladimir Agafonkin",
   "license": "MIT",
-  "main": "rbush.js",
+  "main": "index.js",
   "devDependencies": {
     "benchmark": "^2.1.0",
     "eslint": "^2.10.2",
@@ -27,7 +27,7 @@
     "tape": "^4.5.1"
   },
   "scripts": {
-    "test": "eslint rbush.js test/test.js && node test/test.js | faucet",
+    "test": "eslint index.js test/test.js && node test/test.js | faucet",
     "perf": "node ./debug/perf.js",
     "cov": "istanbul cover test/test.js -x test/test.js"
   },
