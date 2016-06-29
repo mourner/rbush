@@ -202,6 +202,10 @@ RBush should run on Node and all major browsers. The only caveat: IE 8 needs an 
 
 ## Changelog
 
+#### 2.0.1 &mdash; June 29, 2016
+
+- Fixed browser builds in NPM.
+
 #### 2.0.0 &mdash; June 29, 2016
 
 - **Breaking:** changed the default format of inserted items from `[20, 40, 30, 50]` to `{minX: 20, minY: 40, maxX: 30, maxY: 50}`.
