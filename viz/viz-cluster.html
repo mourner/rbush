@@ -21,8 +21,9 @@ function genData(N, M, R) {
     var data = [];
     for (var i = 0; i < M; i++) {
         var cluster = randClusterPoint(R);
+        var size = Math.min(Math.ceil(N / M), N - data.length);
 
-        for (var j = 0; j < N / M; j++) {
+        for (var j = 0; j < size; j++) {
             data.push(randClusterBox(cluster, R, 1));
         }
     }
@@ -43,6 +44,8 @@ function genInsertOneByOne(K, M) {
             tree.insert(data2[i]);
         }
         console.timeEnd('insert ' + K + ' items');
+
+        data = data.concat(data2);
 
         draw();
     };

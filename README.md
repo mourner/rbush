@@ -19,8 +19,14 @@ Open web console to see benchmarks;
 click on buttons to insert or remove items;
 click to perform search under the cursor.
 
-* [uniformly distributed random data](http://mourner.github.io/rbush/viz/viz-uniform.html)
 * [randomly clustered data](http://mourner.github.io/rbush/viz/viz-cluster.html)
+* [uniformly distributed random data](http://mourner.github.io/rbush/viz/viz-uniform.html)
+
+## Install
+
+Install with NPM (`npm install rbush`), or use CDN links for browsers:
+[rbush.js](https://npmcdn.com/rbush@2.0.1/rbush.js),
+[rbush.min.js](https://npmcdn.com/rbush@2.0.1/rbush.min.js)
 
 ## Usage
 
@@ -65,6 +71,7 @@ which is useful when you only have a copy of the object you need removed (e.g. l
 tree.remove(itemCopy, function (a, b) {
     return a.id === b.id;
 });
+```
 
 Remove all items:
 
@@ -201,6 +208,10 @@ npm run cov  # report test coverage (with more detailed report in coverage/lcov-
 RBush should run on Node and all major browsers. The only caveat: IE 8 needs an [Array#indexOf polyfill](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf#Polyfill) for `remove` method to work.
 
 ## Changelog
+
+#### 2.0.1 &mdash; June 29, 2016
+
+- Fixed browser builds in NPM.
 
 #### 2.0.0 &mdash; June 29, 2016
 
