@@ -33,12 +33,16 @@ Install with NPM (`npm install rbush`), or use CDN links for browsers:
 ### Creating a Tree
 
 ```js
-var tree = rbush(9);
+var tree = rbush();
 ```
 
 An optional argument to `rbush` defines the maximum number of entries in a tree node.
-It drastically affects the performance, so you should adjust it
-considering the type of data and search queries you perform.
+`9` (used by default) is a reasonable choice for most applications.
+Higher value means faster insertion and slower search, and vice versa.
+
+```js
+var tree = rbush(16);
+```
 
 ### Adding Data
 
