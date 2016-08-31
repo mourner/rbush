@@ -25,8 +25,8 @@ click to perform search under the cursor.
 ## Install
 
 Install with NPM (`npm install rbush`), or use CDN links for browsers:
-[rbush.js](https://npmcdn.com/rbush@2.0.1/rbush.js),
-[rbush.min.js](https://npmcdn.com/rbush@2.0.1/rbush.min.js)
+[rbush.js](https://unpkg.com/rbush@2.0.1/rbush.js),
+[rbush.min.js](https://unpkg.com/rbush@2.0.1/rbush.min.js)
 
 ## Usage
 
