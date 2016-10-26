@@ -30,7 +30,7 @@
   },
   "scripts": {
     "test": "eslint index.js test/test.js && node test/test.js | faucet",
-    "perf": "node ./debug/perf.js",
+    "perf": "node ./bench/perf.js",
     "cov": "istanbul cover test/test.js -x test/test.js",
     "build": "browserify index.js -s rbush -o rbush.js",
     "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
