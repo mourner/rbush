@@ -95,6 +95,8 @@ var tree = rbush(9, ['[0]', '[1]', '[0]', '[1]']); // accept [x, y] points
 tree.insert([20, 50]);
 ```
 
+If you're indexing a static list of points (you don't need to add/remove points after indexing), you should use [kdbush](https://github.com/mourner/kdbush) which performs point indexing 5-8x faster than RBush.
+
 ### Bulk-Inserting Data
 
 Bulk-insert the given data into the tree:
