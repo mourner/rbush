@@ -1,8 +1,8 @@
 'use strict';
 
-module.exports = rbush;
+export default rbush;
 
-var quickselect = require('quickselect');
+import quickselect from 'quickselect';
 
 function rbush(maxEntries, format) {
     if (!(this instanceof rbush)) return new rbush(maxEntries, format);
