@@ -4,6 +4,11 @@ module.exports = rbush;
 
 var quickselect = require('quickselect');
 
+/**
+ * @param {number} maxEntries
+ * @param {string[]|Symbol[]} format
+ * @return {rbush}
+ */
 function rbush(maxEntries, format) {
     if (!(this instanceof rbush)) return new rbush(maxEntries, format);
 
@@ -438,20 +443,51 @@ rbush.prototype = {
     _initFormat: function (format) {
         // data format (minX, minY, maxX, maxY accessors)
 
-        // uses eval-type function compilation instead of just accepting a toBBox function
-        // because the algorithms are very sensitive to sorting functions performance,
-        // so they should be dead simple and without inner calls
+        //===================================================================
+        // For backward compatibility with the old format contract
+        //===================================================================
+        const oldFormat = /[\[|.](\w+)\]?/;
+        const STRING = 'string';
+        const WARNING = 'Using dot or bracket notation to provide custom format is deprecated. Please use strings or Symbols for property names instead.';
 
-        var compareArr = ['return a', ' - b', ';'];
+        var logWarning = null;
+        var getFormat = function (arg) {
+            if (typeof arg === STRING) {
+                var match = oldFormat.exec(arg);
+                if (match) {
+                    logWarning = !logWarning ? console.warn.bind(null, WARNING) : logWarning;
+                    return match[1];
+                }
+            }
+            return arg;
+        };
 
-        this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
-        this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
+        format[0] = getFormat(format[0]);
+        format[1] = getFormat(format[1]);
+        format[2] = getFormat(format[2]);
+        format[3] = getFormat(format[3]);
 
-        this.toBBox = new Function('a',
-            'return {minX: a' + format[0] +
-            ', minY: a' + format[1] +
-            ', maxX: a' + format[2] +
-            ', maxY: a' + format[3] + '};');
+        if (logWarning) {
+            logWarning();
+        }
+        //===================================================================
+
+        this.compareMinX = function (minX, a, b) {
+            return a[minX] - b[minX];
+        }.bind(this, format[0]);
+
+        this.compareMinX = function (minY, a, b) {
+            return a[minY] - b[minY];
+        }.bind(this, format[1]);
+
+        this.toBBox = function (minX, minY, maxX, maxY, n) {
+            return {
+                minX: n[minX],
+                minY: n[minY],
+                maxX: n[maxX],
+                maxY: n[maxY]
+            };
+        }.bind(this, format[0], format[1], format[2], format[3]);
     }
 };
 

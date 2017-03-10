@@ -25,6 +25,7 @@
     "eslint-config-mourner": "^2.0.1",
     "faucet": "0.0.1",
     "istanbul": "~0.4.3",
+    "minimist": "^1.2.0",
     "tape": "^4.5.1",
     "uglify-js": "^2.6.4"
   },
