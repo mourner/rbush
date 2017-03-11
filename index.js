@@ -58,7 +58,7 @@ rbush.prototype = {
 
         var node = this.data,
             toBBox = this.toBBox;
-        bbox = toBBox(bbox)
+        bbox = toBBox(bbox);
 
         if (!intersects(bbox, node)) return false;
 
