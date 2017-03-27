@@ -20,8 +20,8 @@
   "main": "index.js",
   "devDependencies": {
     "benchmark": "^2.1.0",
-    "browserify": "^13.0.1",
-    "eslint": "^2.10.2",
+    "browserify": "^14.1.0",
+    "eslint": "^3.18.0",
     "eslint-config-mourner": "^2.0.1",
     "faucet": "0.0.1",
     "istanbul": "~0.4.3",
