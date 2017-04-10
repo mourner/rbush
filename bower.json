@@ -1,0 +1,30 @@
+{
+  "name": "rbush",
+  "version": "0.0.1",
+  "homepage": "https://github.com/mourner/rbush",
+  "description": "RBush — a high-performance JavaScript R-tree-based 2D spatial index for points and rectangles",
+  "main": "rbush.js",
+  "keywords": [
+    "2dindex",
+    "r",
+    "rindex",
+    "webgl",
+    "google",
+    "maps",
+    "googlemaps",
+    "gmaps"
+  ],
+  "license": "Apache2",
+  "ignore": [
+    "**/.*",
+    "*.md",
+    "docs",
+    "editor",
+    "examples/*",
+    "!examples/js",
+    "src",
+    "test",
+    "utils",
+    "LICENSE"
+  ]
+}
