@@ -24,10 +24,11 @@ rbush.prototype = {
         return this._all(this.data, []);
     },
 
-    search: function (bbox) {
+    search: function (bbox, options) {
 
         var node = this.data,
             result = [],
+            path = [],
             toBBox = this.toBBox;
 
         if (!intersects(bbox, node)) return result;
@@ -36,17 +37,30 @@ rbush.prototype = {
             i, len, child, childBBox;
 
         while (node) {
+            path.push(node);
             for (i = 0, len = node.children.length; i < len; i++) {
-
                 child = node.children[i];
                 childBBox = node.leaf ? toBBox(child) : child;
-
                 if (intersects(bbox, childBBox)) {
-                    if (node.leaf) result.push(child);
-                    else if (contains(bbox, childBBox)) this._all(child, result);
-                    else nodesToSearch.push(child);
+                    if (node.leaf) {
+                        result.push(child);
+                        if (options && options.delete) {
+                            node.children.splice(i, 1);
+                            i--;
+                            len--;
+                            this._condense(path);
+                        }
+                    } else if (contains(bbox, childBBox)) {
+                        if (options && options.delete) {
+                            this._all(child, result, path);
+                            this._condense(path);
+                        } else {
+                            this._all(child, result);
+                        }
+                    } else nodesToSearch.push(child);
                 }
             }
+            path.pop();
             node = nodesToSearch.pop();
         }
 
@@ -187,13 +201,21 @@ rbush.prototype = {
         return this;
     },
 
-    _all: function (node, result) {
+    _all: function (node, result, path) {
         var nodesToSearch = [];
         while (node) {
-            if (node.leaf) result.push.apply(result, node.children);
-            else nodesToSearch.push.apply(nodesToSearch, node.children);
+            if (path) {
+                path.push(node);
+            }
+            if (node.leaf) {
+                if (path) {
+                    node.children = [];
+                }
+                result.push.apply(result, node.children);
+            } else nodesToSearch.push.apply(nodesToSearch, node.children);
 
             node = nodesToSearch.pop();
+            if (path) path.pop();
         }
         return result;
     },

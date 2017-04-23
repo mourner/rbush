@@ -390,7 +390,7 @@ t('#search accepts option to delete results: subsequent call', function (t) {
 
     result = tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70});
 
-    t.equal(result, []);
+    t.equal(result.length, 0);
     t.end();
 });
 
@@ -409,7 +409,7 @@ t('#search accepts option to delete results: exclude previous result', function 
 
     t.equal(result.length, 2);
     sortedEqual(t, result, [
-        [35, 35, 35, 35 ], [35, 60, 35, 60]
+        [35, 35, 35, 35], [35, 60, 35, 60]
     ].map(arrToBBox));
     t.end();
 });
