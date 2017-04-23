@@ -376,3 +376,40 @@ t('should have chainable API', function (t) {
     });
     t.end();
 });
+
+t('#search accepts option to delete results: subsequent call', function (t) {
+    var tree = rbush(4).load(data);
+    var result = tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70}, {
+        delete: true
+    });
+
+    sortedEqual(t, result, [
+        [70,20,70,20],[75,25,75,25],[45,45,45,45],[50,50,50,50],[60,60,60,60],[70,70,70,70],
+        [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
+    ].map(arrToBBox));
+
+    result = tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70});
+
+    t.equal(result, []);
+    t.end();
+});
+
+t('#search accepts option to delete results: exclude previous result', function (t) {
+    var tree = rbush(4).load(data);
+    var result = tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70}, {
+        delete: true
+    });
+
+    sortedEqual(t, result, [
+        [70,20,70,20],[75,25,75,25],[45,45,45,45],[50,50,50,50],[60,60,60,60],[70,70,70,70],
+        [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
+    ].map(arrToBBox));
+
+    result = tree.search({minX: 35, minY: 20, maxX: 80, maxY: 70});
+
+    t.equal(result.length, 2);
+    sortedEqual(t, result, [
+        [35, 35, 35, 35 ], [35, 60, 35, 60]
+    ].map(arrToBBox));
+    t.end();
+});
