@@ -413,3 +413,19 @@ t('#search accepts option to delete results: exclude previous result', function 
     ].map(arrToBBox));
     t.end();
 });
+
+t('#search accepts option to delete results: subsequent exclude', function (t) {
+    var tree = rbush(4).load(data);
+    tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70}, {
+        delete: true
+    });
+    tree.search({minX: 35, minY: 20, maxX: 80, maxY: 70}, {
+        delete: true
+    });
+    var result = tree.search({minX: 35, minY: 20, maxX: 80, maxY: 70}, {
+        delete: true
+    });
+    t.equal(result.length, 0);
+
+    t.end();
+});
