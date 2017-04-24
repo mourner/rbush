@@ -47,11 +47,27 @@ for (i = 0; i < 1000; i++) {
 }
 console.timeEnd('1000 searches 10%');
 
+console.time('1000 searches 10% with delete');
+for (i = 0; i < 1000; i++) {
+    tree.search(bboxes100[i], { delete: true });
+}
+console.timeEnd('1000 searches 10% with delete');
+
+tree = rbush(maxFill);
+
 console.time('1000 searches 1%');
 for (i = 0; i < 1000; i++) {
     tree.search(bboxes10[i]);
 }
 console.timeEnd('1000 searches 1%');
+
+console.time('1000 searches 1% with delete');
+for (i = 0; i < 1000; i++) {
+    tree.search(bboxes10[i], { delete: true });
+}
+console.timeEnd('1000 searches 1% with delete');
+
+tree = rbush(maxFill);
 
 console.time('1000 searches 0.01%');
 for (i = 0; i < 1000; i++) {

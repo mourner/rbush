@@ -132,6 +132,21 @@ Returns an array of data items (points or rectangles) that the given bounding bo
 Note that the `search` method accepts a bounding box in `{minX, minY, maxX, maxY}` format
 regardless of the format specified in the constructor (which only affects inserted objects).
 
+Search accepts options object, where you can specify if returned result should be deleted from
+index:
+```js
+var result = tree.search({
+  minX: 40,
+  minY: 20,
+  maxX: 80,
+  maxY: 70
+}, { delete: true });
+````
+Example above deletes returned result from index right upon search, thus ensuring that
+you will never get the returned result in sebsequent search queries. It works more
+effectively than either memoization and filtering (checking if results have been already returned before)
+or deleting results one by one using `delete` method call.
+
 ```js
 var allItems = tree.all();
 ```
