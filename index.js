@@ -208,10 +208,10 @@ rbush.prototype = {
                 path.push(node);
             }
             if (node.leaf) {
+                result.push.apply(result, node.children);
                 if (path) {
                     node.children = [];
                 }
-                result.push.apply(result, node.children);
             } else nodesToSearch.push.apply(nodesToSearch, node.children);
 
             node = nodesToSearch.pop();
