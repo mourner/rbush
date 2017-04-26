@@ -132,11 +132,25 @@ Returns an array of data items (points or rectangles) that the given bounding bo
 Note that the `search` method accepts a bounding box in `{minX, minY, maxX, maxY}` format
 regardless of the format specified in the constructor (which only affects inserted objects).
 
+Also `search` accepts a predicate, which is a function that takes a single result as an argument and returns `true` or `false` if the item should be included to the final result or not respectively:
+```js
+var result = tree.search({
+  minX: 40,
+  minY: 20,
+  maxX: 80,
+  maxY: 70
+}, function (dot) {
+  if (dot.someCheckHere) {
+    return false;
+  }
+  return true;
+});
+```
+
+Return all items of the tree:
 ```js
 var allItems = tree.all();
 ```
-
-Returns all items of the tree.
 
 ### Collisions
 
