@@ -26,13 +26,15 @@
     "faucet": "0.0.1",
     "istanbul": "~0.4.3",
     "tape": "^4.5.1",
-    "uglify-js": "^2.6.4"
+    "uglify-js": "^2.6.4",
+    "watchify": "^3.9.0"
   },
   "scripts": {
     "test": "eslint index.js test/test.js && node test/test.js | faucet",
     "perf": "node ./bench/perf.js",
     "cov": "istanbul cover test/test.js -x test/test.js",
     "build": "browserify index.js -s rbush -o rbush.js",
+    "watch": "watchify index.js -s rbush -o rbush.js -v",
     "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
     "prepublish": "npm run build && npm run build-min"
   },
