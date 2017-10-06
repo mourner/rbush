@@ -1,6 +1,7 @@
 'use strict';
 
 module.exports = rbush;
+module.exports.default = rbush;
 
 var quickselect = require('quickselect');
 
