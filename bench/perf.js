@@ -1,20 +1,49 @@
 'use strict';
 
+var rbush = typeof require !== 'undefined' ? require('..') : rbush;
+var args = require('minimist')(process.argv.slice(2));
+
 var N = 1000000,
     maxFill = 16;
 
+console.log('using custom format: ' + (!!args['format'] ? 'yes' : 'no'));
 console.log('number: ' + N);
 console.log('maxFill: ' + maxFill);
 
-function randBox(size) {
-    var x = Math.random() * (100 - size),
-        y = Math.random() * (100 - size);
-    return {
-        minX: x,
-        minY: y,
-        maxX: x + size * Math.random(),
-        maxY: y + size * Math.random()
-    };
+var randBox = null;
+var tree = null;
+
+if (args['format']) {
+
+    const minX = Symbol();
+    const minY = Symbol();
+    const maxX = Symbol();
+    const maxY = Symbol();
+
+	tree = rbush(maxFill, [minX, minY, maxX, maxY]);
+	randBox = function (size) {
+		var x = Math.random() * (100 - size),
+			y = Math.random() * (100 - size);
+		return {
+			[minX]: x,
+			[minY]: y,
+			[maxX]: x + size * Math.random(),
+			[maxY]: y + size * Math.random()
+		};
+	};
+}
+else {
+	tree = rbush(maxFill);
+	randBox = function (size) {
+		var x = Math.random() * (100 - size),
+			y = Math.random() * (100 - size);
+		return {
+			minX: x,
+			minY: y,
+			maxX: x + size * Math.random(),
+			maxY: y + size * Math.random()
+		};
+	}
 }
 
 function genData(N, size) {
@@ -30,10 +59,6 @@ var data2 = genData(N, 1);
 var bboxes100 = genData(1000, 100 * Math.sqrt(0.1));
 var bboxes10 = genData(1000, 10);
 var bboxes1 = genData(1000, 1);
-
-var rbush = typeof require !== 'undefined' ? require('..') : rbush;
-
-var tree = rbush(maxFill);
 
 console.time('insert one by one');
 for (var i = 0; i < N; i++) {
