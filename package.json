@@ -18,15 +18,17 @@
   "author": "Vladimir Agafonkin",
   "license": "MIT",
   "main": "index.js",
+  "jsdelivr": "rbush.js",
+  "unpkg": "rbush.js",
   "devDependencies": {
-    "benchmark": "^2.1.0",
-    "browserify": "^14.1.0",
-    "eslint": "^3.18.0",
-    "eslint-config-mourner": "^2.0.1",
+    "benchmark": "^2.1.4",
+    "browserify": "^14.5.0",
+    "eslint": "^4.13.1",
+    "eslint-config-mourner": "^2.0.3",
     "faucet": "0.0.1",
-    "istanbul": "~0.4.3",
-    "tape": "^4.5.1",
-    "uglify-js": "^2.6.4"
+    "istanbul": "~0.4.5",
+    "tape": "^4.8.0",
+    "uglify-js": "^3.2.2"
   },
   "scripts": {
     "test": "eslint index.js test/test.js && node test/test.js | faucet",
@@ -34,8 +36,12 @@
     "cov": "istanbul cover test/test.js -x test/test.js",
     "build": "browserify index.js -s rbush -o rbush.js",
     "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
-    "prepublish": "npm run build && npm run build-min"
+    "prepare": "npm run build && npm run build-min"
   },
+  "files": [
+    "rbush.js",
+    "rbush.min.js"
+  ],
   "eslintConfig": {
     "extends": "mourner",
     "rules": {
@@ -44,6 +50,6 @@
     }
   },
   "dependencies": {
-    "quickselect": "^1.0.0"
+    "quickselect": "^1.0.1"
   }
 }
