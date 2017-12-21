@@ -215,6 +215,10 @@ RBush should run on Node and all major browsers. The only caveat: IE 8 needs an 
 
 ## Changelog
 
+#### 2.0.2 &mdash; Dec 21, 2017
+
+- Added default export for better ES6 modules / transpiler support.
+
 #### 2.0.1 &mdash; June 29, 2016
 
 - Fixed browser builds in NPM.
