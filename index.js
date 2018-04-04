@@ -3,7 +3,7 @@
 module.exports = rbush;
 module.exports.default = rbush;
 
-var quickselect = require('quickselect');
+var quickselect = require('quickselect').default;
 
 function rbush(maxEntries, format) {
     if (!(this instanceof rbush)) return new rbush(maxEntries, format);
