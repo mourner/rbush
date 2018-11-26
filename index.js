@@ -1,11 +1,6 @@
-'use strict';
+import quickselect from 'quickselect';
 
-module.exports = rbush;
-module.exports.default = rbush;
-
-var quickselect = require('quickselect');
-
-function rbush(maxEntries, format) {
+export default function rbush(maxEntries, format) {
     if (!(this instanceof rbush)) return new rbush(maxEntries, format);
 
     // max entries in a node is 9 by default; min node fill is 40% for best performance

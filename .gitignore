@@ -3,3 +3,4 @@ npm-debug.log
 coverage
 rbush.js
 rbush.min.js
+rbush.es.js
