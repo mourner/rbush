@@ -1,25 +1,17 @@
-import {uglify} from 'rollup-plugin-uglify';
+import {terser} from 'rollup-plugin-terser';
 import resolve from 'rollup-plugin-node-resolve';
 
-export default [{
-    input: 'index.js',
-    output: [{
-        name: 'rbush',
-        format: 'umd',
-        file: 'rbush.js',
-        indent: false
-    }, {
-        file: 'rbush.es.js',
-        format: 'es'
-    }],
-    plugins: [resolve()]
-},
-{
+const output = (file, plugins) => ({
     input: 'index.js',
     output: {
         name: 'rbush',
         format: 'umd',
-        file: 'rbush.min.js',
+        file
     },
-    plugins: [resolve(), uglify()]
-}];
+    plugins
+});
+
+export default [
+    output('rbush.js', [resolve()]),
+    output('rbush.min.js', [resolve(), terser()])
+];

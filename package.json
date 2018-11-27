@@ -17,11 +17,11 @@
   ],
   "author": "Vladimir Agafonkin",
   "license": "MIT",
-  "main": "index.js",
+  "main": "rbush.js",
   "module": "index.js",
-  "browser": "rbush.js",
-  "jsdelivr": "rbush.js",
-  "unpkg": "rbush.js",
+  "browser": "rbush.min.js",
+  "jsdelivr": "rbush.min.js",
+  "unpkg": "rbush.min.js",
   "devDependencies": {
     "benchmark": "^2.1.4",
     "eslint": "^4.13.1",
@@ -31,20 +31,22 @@
     "nyc": "^13.1.0",
     "rollup": "^0.67.3",
     "rollup-plugin-node-resolve": "^3.4.0",
-    "rollup-plugin-uglify": "^6.0.0",
+    "rollup-plugin-terser": "^3.0.0",
     "tape": "^4.8.0"
   },
   "scripts": {
-    "test": "eslint index.js test/test.js && node -r esm test/test.js | faucet",
+    "pretest": "eslint index.js test/test.js ",
+    "test": "node -r esm test/test.js | faucet",
     "perf": "node -r esm ./bench/perf.js",
     "cov": "nyc --check-coverage --require esm npm test",
     "build": "rollup -c",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
   },
   "files": [
+    "index.js",
     "rbush.js",
-    "rbush.min.js",
-    "rbush.es.js"
+    "rbush.min.js"
   ],
   "eslintConfig": {
     "extends": "mourner",
