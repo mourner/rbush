@@ -4,4 +4,3 @@ coverage
 .nyc_output
 rbush.js
 rbush.min.js
-rbush.es.js
