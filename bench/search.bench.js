@@ -1,16 +1,16 @@
-var Benchmark = require('benchmark'),
-    rbush = require('../rbush'),
-    genData = require('./gendata');
+import Benchmark from 'benchmark';
+import RBush from '../index.js';
+import {generate} from './gendata';
 
 var N = 10000,
     maxFill = 16;
 
-var data = genData(N, 1);
-var bboxes100 = genData(1000, 100 * Math.sqrt(0.1));
-var bboxes10 = genData(1000, 10);
-var bboxes1 = genData(1000, 1);
+var data = generate(N, 1);
+var bboxes100 = generate(1000, 100 * Math.sqrt(0.1));
+var bboxes10 = generate(1000, 10);
+var bboxes1 = generate(1000, 1);
 
-var tree = rbush(maxFill);
+var tree = new RBush(maxFill);
 for (var i = 0; i < N; i++) {
     tree.insert(data[i]);
 }

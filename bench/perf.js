@@ -1,4 +1,4 @@
-import rbush from '..';
+import RBush from '../index.js';
 
 var N = 1000000,
     maxFill = 16;
@@ -31,7 +31,7 @@ var bboxes100 = genData(1000, 100 * Math.sqrt(0.1));
 var bboxes10 = genData(1000, 10);
 var bboxes1 = genData(1000, 1);
 
-var tree = rbush(maxFill);
+var tree = new RBush(maxFill);
 
 console.time('insert one by one');
 for (var i = 0; i < N; i++) {
