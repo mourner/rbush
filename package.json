@@ -24,21 +24,20 @@
   "unpkg": "rbush.min.js",
   "devDependencies": {
     "benchmark": "^2.1.4",
+    "c8": "^4.1.4",
     "eslint": "^4.13.1",
     "eslint-config-mourner": "^2.0.3",
-    "esm": "^3.0.84",
-    "faucet": "0.0.1",
-    "nyc": "^13.1.0",
-    "rollup": "^0.67.3",
-    "rollup-plugin-node-resolve": "^3.4.0",
-    "rollup-plugin-terser": "^3.0.0",
-    "tape": "^4.8.0"
+    "esm": "^3.2.22",
+    "rollup": "^1.11.3",
+    "rollup-plugin-node-resolve": "^4.2.3",
+    "rollup-plugin-terser": "^4.0.4",
+    "tape": "^4.10.1"
   },
   "scripts": {
     "pretest": "eslint index.js test/test.js ",
-    "test": "node -r esm test/test.js | faucet",
+    "test": "tape -r esm test/test.js",
     "perf": "node -r esm ./bench/perf.js",
-    "cov": "nyc --check-coverage --require esm npm test",
+    "cov": "c8 npm run test",
     "build": "rollup -c",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
@@ -52,10 +51,6 @@
     "extends": "mourner",
     "parserOptions": {
       "sourceType": "module"
-    },
-    "rules": {
-      "new-cap": 0,
-      "consistent-return": 0
     }
   },
   "dependencies": {

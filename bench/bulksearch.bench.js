@@ -1,31 +1,31 @@
-var Benchmark = require('benchmark'),
-    rbush = require('../rbush'),
-    genData = require('./gendata');
+import Benchmark from 'benchmark';
+import RBush from '../index.js';
+import {generate} from './gendata';
 
 var N = 10000,
     maxFill = 16;
 
-var data = genData(N, 1);
-var bboxes100 = genData(1000, 100 * Math.sqrt(0.1));
-var bboxes10 = genData(1000, 10);
-var bboxes1 = genData(1000, 1);
+var data = generate(N, 100);
+var bboxes100 = generate(1000, 100 * Math.sqrt(0.1));
+var bboxes10 = generate(1000, 10);
+var bboxes1 = generate(1000, 1);
 
-var tree = rbush(maxFill);
+var tree = new RBush(maxFill);
 tree.load(data);
 
 new Benchmark.Suite()
 .add('1000 searches 10% after bulk loading ' + N, function () {
-    for (i = 0; i < 1000; i++) {
+    for (var i = 0; i < 1000; i++) {
         tree.search(bboxes100[i]);
     }
 })
 .add('1000 searches 1% after bulk loading ' + N, function () {
-    for (i = 0; i < 1000; i++) {
+    for (var i = 0; i < 1000; i++) {
         tree.search(bboxes10[i]);
     }
 })
 .add('1000 searches 0.01% after bulk loading ' + N, function () {
-    for (i = 0; i < 1000; i++) {
+    for (var i = 0; i < 1000; i++) {
         tree.search(bboxes1[i]);
     }
 })
