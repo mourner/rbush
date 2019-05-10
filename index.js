@@ -1,15 +1,10 @@
 import quickselect from 'quickselect';
 
 export default class RBush {
-    constructor(maxEntries, format) {
+    constructor(maxEntries = 9) {
         // max entries in a node is 9 by default; min node fill is 40% for best performance
-        this._maxEntries = Math.max(4, maxEntries || 9);
+        this._maxEntries = Math.max(4, maxEntries);
         this._minEntries = Math.max(2, Math.ceil(this._maxEntries * 0.4));
-
-        if (format) {
-            this._initFormat(format);
-        }
-
         this.clear();
     }
 
@@ -409,26 +404,6 @@ export default class RBush {
 
             } else calcBBox(path[i], this.toBBox);
         }
-    }
-
-    _initFormat(format) {
-        // data format (minX, minY, maxX, maxY accessors)
-
-        // uses eval-type function compilation instead of just accepting a toBBox function
-        // because the algorithms are very sensitive to sorting functions performance,
-        // so they should be dead simple and without inner calls
-
-        const compareArr = ['return a', ' - b', ';'];
-
-        this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
-        this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
-
-        this.toBBox = new Function('a', `return {
-            minX: a${format[0]},
-            minY: a${format[1]},
-            maxX: a${format[2]},
-            maxY: a${format[3]}
-        };`);
     }
 }
 

@@ -37,8 +37,24 @@ const emptyData = [[-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infin
     [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity],
     [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity]].map(arrToBBox);
 
-t('constructor accepts a format argument to customize the data format', (t) => {
-    const tree = new RBush(4, ['.minLng', '.minLat', '.maxLng', '.maxLat']);
+t('allows custom formats by overriding some methods', (t) => {
+    class MyRBush extends RBush {
+        toBBox(a) {
+            return {
+                minX: a.minLng,
+                minY: a.minLat,
+                maxX: a.maxLng,
+                maxY: a.maxLat
+            };
+        }
+        compareMinX(a, b) {
+            return a.minLng - b.minLng;
+        }
+        compareMinY(a, b) {
+            return a.minLat - b.minLat;
+        }
+    }
+    const tree = new MyRBush(4);
     t.same(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}),
         {minX: 1, minY: 2, maxX: 3, maxY: 4});
     t.end();
