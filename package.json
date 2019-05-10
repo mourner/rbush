@@ -25,8 +25,8 @@
   "devDependencies": {
     "benchmark": "^2.1.4",
     "c8": "^4.1.4",
-    "eslint": "^4.13.1",
-    "eslint-config-mourner": "^2.0.3",
+    "eslint": "^5.16.0",
+    "eslint-config-mourner": "^3.0.0",
     "esm": "^3.2.22",
     "rollup": "^1.11.3",
     "rollup-plugin-node-resolve": "^4.2.3",
@@ -34,7 +34,7 @@
     "tape": "^4.10.1"
   },
   "scripts": {
-    "pretest": "eslint index.js test/test.js ",
+    "pretest": "eslint index.js test/test.js",
     "test": "tape -r esm test/test.js",
     "perf": "node -r esm ./bench/perf.js",
     "cov": "c8 npm run test",
@@ -48,10 +48,7 @@
     "rbush.min.js"
   ],
   "eslintConfig": {
-    "extends": "mourner",
-    "parserOptions": {
-      "sourceType": "module"
-    }
+    "extends": "mourner"
   },
   "dependencies": {
     "quickselect": "^2.0.0"

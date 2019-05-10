@@ -18,21 +18,18 @@ export default class RBush {
     }
 
     search(bbox) {
-
-        var node = this.data,
-            result = [],
-            toBBox = this.toBBox;
+        let node = this.data;
+        const result = [];
 
         if (!intersects(bbox, node)) return result;
 
-        var nodesToSearch = [],
-            i, len, child, childBBox;
+        const toBBox = this.toBBox;
+        const nodesToSearch = [];
 
         while (node) {
-            for (i = 0, len = node.children.length; i < len; i++) {
-
-                child = node.children[i];
-                childBBox = node.leaf ? toBBox(child) : child;
+            for (let i = 0; i < node.children.length; i++) {
+                const child = node.children[i];
+                const childBBox = node.leaf ? toBBox(child) : child;
 
                 if (intersects(bbox, childBBox)) {
                     if (node.leaf) result.push(child);
@@ -47,20 +44,15 @@ export default class RBush {
     }
 
     collides(bbox) {
-
-        var node = this.data,
-            toBBox = this.toBBox;
+        let node = this.data;
 
         if (!intersects(bbox, node)) return false;
 
-        var nodesToSearch = [],
-            i, len, child, childBBox;
-
+        const nodesToSearch = [];
         while (node) {
-            for (i = 0, len = node.children.length; i < len; i++) {
-
-                child = node.children[i];
-                childBBox = node.leaf ? toBBox(child) : child;
+            for (let i = 0; i < node.children.length; i++) {
+                const child = node.children[i];
+                const childBBox = node.leaf ? this.toBBox(child) : child;
 
                 if (intersects(bbox, childBBox)) {
                     if (node.leaf || contains(bbox, childBBox)) return true;
@@ -77,14 +69,14 @@ export default class RBush {
         if (!(data && data.length)) return this;
 
         if (data.length < this._minEntries) {
-            for (var i = 0, len = data.length; i < len; i++) {
+            for (let i = 0; i < data.length; i++) {
                 this.insert(data[i]);
             }
             return this;
         }
 
         // recursively build the tree with the given data from scratch using OMT algorithm
-        var node = this._build(data.slice(), 0, data.length - 1, 0);
+        let node = this._build(data.slice(), 0, data.length - 1, 0);
 
         if (!this.data.children.length) {
             // save as is if tree is empty
@@ -97,7 +89,7 @@ export default class RBush {
         } else {
             if (this.data.height < node.height) {
                 // swap trees if inserted one is bigger
-                var tmpNode = this.data;
+                const tmpNode = this.data;
                 this.data = node;
                 node = tmpNode;
             }
@@ -122,11 +114,11 @@ export default class RBush {
     remove(item, equalsFn) {
         if (!item) return this;
 
-        var node = this.data,
-            bbox = this.toBBox(item),
-            path = [],
-            indexes = [],
-            i, parent, index, goingUp;
+        let node = this.data;
+        const bbox = this.toBBox(item);
+        const path = [];
+        const indexes = [];
+        let i, parent, goingUp;
 
         // depth-first iterative tree traversal
         while (node || path.length) {
@@ -139,7 +131,7 @@ export default class RBush {
             }
 
             if (node.leaf) { // check current node
-                index = findItem(item, node.children, equalsFn);
+                const index = findItem(item, node.children, equalsFn);
 
                 if (index !== -1) {
                     // item found, remove the item and condense tree upwards
@@ -181,10 +173,10 @@ export default class RBush {
     }
 
     _all(node, result) {
-        var nodesToSearch = [];
+        const nodesToSearch = [];
         while (node) {
-            if (node.leaf) result.push.apply(result, node.children);
-            else nodesToSearch.push.apply(nodesToSearch, node.children);
+            if (node.leaf) result.push(...node.children);
+            else nodesToSearch.push(...node.children);
 
             node = nodesToSearch.pop();
         }
@@ -193,9 +185,9 @@ export default class RBush {
 
     _build(items, left, right, height) {
 
-        var N = right - left + 1,
-            M = this._maxEntries,
-            node;
+        const N = right - left + 1;
+        let M = this._maxEntries;
+        let node;
 
         if (N <= M) {
             // reached leaf level; return leaf
@@ -218,21 +210,20 @@ export default class RBush {
 
         // split the items into M mostly square tiles
 
-        var N2 = Math.ceil(N / M),
-            N1 = N2 * Math.ceil(Math.sqrt(M)),
-            i, j, right2, right3;
+        const N2 = Math.ceil(N / M);
+        const N1 = N2 * Math.ceil(Math.sqrt(M));
 
         multiSelect(items, left, right, N1, this.compareMinX);
 
-        for (i = left; i <= right; i += N1) {
+        for (let i = left; i <= right; i += N1) {
 
-            right2 = Math.min(i + N1 - 1, right);
+            const right2 = Math.min(i + N1 - 1, right);
 
             multiSelect(items, i, right2, N2, this.compareMinY);
 
-            for (j = i; j <= right2; j += N2) {
+            for (let j = i; j <= right2; j += N2) {
 
-                right3 = Math.min(j + N2 - 1, right2);
+                const right3 = Math.min(j + N2 - 1, right2);
 
                 // pack each entry recursively
                 node.children.push(this._build(items, j, right3, height - 1));
@@ -245,20 +236,19 @@ export default class RBush {
     }
 
     _chooseSubtree(bbox, node, level, path) {
-
-        var i, len, child, targetNode, area, enlargement, minArea, minEnlargement;
-
         while (true) {
             path.push(node);
 
             if (node.leaf || path.length - 1 === level) break;
 
-            minArea = minEnlargement = Infinity;
+            let minArea = Infinity;
+            let minEnlargement = Infinity;
+            let targetNode;
 
-            for (i = 0, len = node.children.length; i < len; i++) {
-                child = node.children[i];
-                area = bboxArea(child);
-                enlargement = enlargedArea(bbox, child) - area;
+            for (let i = 0; i < node.children.length; i++) {
+                const child = node.children[i];
+                const area = bboxArea(child);
+                const enlargement = enlargedArea(bbox, child) - area;
 
                 // choose entry with the least area enlargement
                 if (enlargement < minEnlargement) {
@@ -282,13 +272,11 @@ export default class RBush {
     }
 
     _insert(item, level, isNode) {
-
-        var toBBox = this.toBBox,
-            bbox = isNode ? item : toBBox(item),
-            insertPath = [];
+        const bbox = isNode ? item : this.toBBox(item);
+        const insertPath = [];
 
         // find the best node for accommodating the item, saving all nodes along the path too
-        var node = this._chooseSubtree(bbox, this.data, level, insertPath);
+        const node = this._chooseSubtree(bbox, this.data, level, insertPath);
 
         // put the item into the node
         node.children.push(item);
@@ -308,16 +296,15 @@ export default class RBush {
 
     // split overflowed node into two
     _split(insertPath, level) {
-
-        var node = insertPath[level],
-            M = node.children.length,
-            m = this._minEntries;
+        const node = insertPath[level];
+        const M = node.children.length;
+        const m = this._minEntries;
 
         this._chooseSplitAxis(node, m, M);
 
-        var splitIndex = this._chooseSplitIndex(node, m, M);
+        const splitIndex = this._chooseSplitIndex(node, m, M);
 
-        var newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
+        const newNode = createNode(node.children.splice(splitIndex, node.children.length - splitIndex));
         newNode.height = node.height;
         newNode.leaf = node.leaf;
 
@@ -337,17 +324,16 @@ export default class RBush {
     }
 
     _chooseSplitIndex(node, m, M) {
+        let index;
+        let minOverlap = Infinity;
+        let minArea = Infinity;
 
-        var i, bbox1, bbox2, overlap, area, minOverlap, minArea, index;
+        for (let i = m; i <= M - m; i++) {
+            const bbox1 = distBBox(node, 0, i, this.toBBox);
+            const bbox2 = distBBox(node, i, M, this.toBBox);
 
-        minOverlap = minArea = Infinity;
-
-        for (i = m; i <= M - m; i++) {
-            bbox1 = distBBox(node, 0, i, this.toBBox);
-            bbox2 = distBBox(node, i, M, this.toBBox);
-
-            overlap = intersectionArea(bbox1, bbox2);
-            area = bboxArea(bbox1) + bboxArea(bbox2);
+            const overlap = intersectionArea(bbox1, bbox2);
+            const area = bboxArea(bbox1) + bboxArea(bbox2);
 
             // choose distribution with minimum overlap
             if (overlap < minOverlap) {
@@ -370,11 +356,10 @@ export default class RBush {
 
     // sorts node children by the best axis for split
     _chooseSplitAxis(node, m, M) {
-
-        var compareMinX = node.leaf ? this.compareMinX : compareNodeMinX,
-            compareMinY = node.leaf ? this.compareMinY : compareNodeMinY,
-            xMargin = this._allDistMargin(node, m, M, compareMinX),
-            yMargin = this._allDistMargin(node, m, M, compareMinY);
+        const compareMinX = node.leaf ? this.compareMinX : compareNodeMinX;
+        const compareMinY = node.leaf ? this.compareMinY : compareNodeMinY;
+        const xMargin = this._allDistMargin(node, m, M, compareMinX);
+        const yMargin = this._allDistMargin(node, m, M, compareMinY);
 
         // if total distributions margin value is minimal for x, sort by minX,
         // otherwise it's already sorted by minY
@@ -383,23 +368,21 @@ export default class RBush {
 
     // total margin of all possible split distributions where each node is at least m full
     _allDistMargin(node, m, M, compare) {
-
         node.children.sort(compare);
 
-        var toBBox = this.toBBox,
-            leftBBox = distBBox(node, 0, m, toBBox),
-            rightBBox = distBBox(node, M - m, M, toBBox),
-            margin = bboxMargin(leftBBox) + bboxMargin(rightBBox),
-            i, child;
+        const toBBox = this.toBBox;
+        const leftBBox = distBBox(node, 0, m, toBBox);
+        const rightBBox = distBBox(node, M - m, M, toBBox);
+        let margin = bboxMargin(leftBBox) + bboxMargin(rightBBox);
 
-        for (i = m; i < M - m; i++) {
-            child = node.children[i];
+        for (let i = m; i < M - m; i++) {
+            const child = node.children[i];
             extend(leftBBox, node.leaf ? toBBox(child) : child);
             margin += bboxMargin(leftBBox);
         }
 
-        for (i = M - m - 1; i >= m; i--) {
-            child = node.children[i];
+        for (let i = M - m - 1; i >= m; i--) {
+            const child = node.children[i];
             extend(rightBBox, node.leaf ? toBBox(child) : child);
             margin += bboxMargin(rightBBox);
         }
@@ -409,14 +392,14 @@ export default class RBush {
 
     _adjustParentBBoxes(bbox, path, level) {
         // adjust bboxes along the given tree path
-        for (var i = level; i >= 0; i--) {
+        for (let i = level; i >= 0; i--) {
             extend(path[i], bbox);
         }
     }
 
     _condense(path) {
         // go through the path, removing empty nodes and updating bboxes
-        for (var i = path.length - 1, siblings; i >= 0; i--) {
+        for (let i = path.length - 1, siblings; i >= 0; i--) {
             if (path[i].children.length === 0) {
                 if (i > 0) {
                     siblings = path[i - 1].children;
@@ -435,23 +418,24 @@ export default class RBush {
         // because the algorithms are very sensitive to sorting functions performance,
         // so they should be dead simple and without inner calls
 
-        var compareArr = ['return a', ' - b', ';'];
+        const compareArr = ['return a', ' - b', ';'];
 
         this.compareMinX = new Function('a', 'b', compareArr.join(format[0]));
         this.compareMinY = new Function('a', 'b', compareArr.join(format[1]));
 
-        this.toBBox = new Function('a',
-            'return {minX: a' + format[0] +
-            ', minY: a' + format[1] +
-            ', maxX: a' + format[2] +
-            ', maxY: a' + format[3] + '};');
+        this.toBBox = new Function('a', `return {
+            minX: a${format[0]},
+            minY: a${format[1]},
+            maxX: a${format[2]},
+            maxY: a${format[3]}
+        };`);
     }
 }
 
 function findItem(item, items, equalsFn) {
     if (!equalsFn) return items.indexOf(item);
 
-    for (var i = 0; i < items.length; i++) {
+    for (let i = 0; i < items.length; i++) {
         if (equalsFn(item, items[i])) return i;
     }
     return -1;
@@ -470,8 +454,8 @@ function distBBox(node, k, p, toBBox, destNode) {
     destNode.maxX = -Infinity;
     destNode.maxY = -Infinity;
 
-    for (var i = k, child; i < p; i++) {
-        child = node.children[i];
+    for (let i = k; i < p; i++) {
+        const child = node.children[i];
         extend(destNode, node.leaf ? toBBox(child) : child);
     }
 
@@ -498,10 +482,10 @@ function enlargedArea(a, b) {
 }
 
 function intersectionArea(a, b) {
-    var minX = Math.max(a.minX, b.minX),
-        minY = Math.max(a.minY, b.minY),
-        maxX = Math.min(a.maxX, b.maxX),
-        maxY = Math.min(a.maxY, b.maxY);
+    const minX = Math.max(a.minX, b.minX);
+    const minY = Math.max(a.minY, b.minY);
+    const maxX = Math.min(a.maxX, b.maxX);
+    const maxY = Math.min(a.maxY, b.maxY);
 
     return Math.max(0, maxX - minX) *
            Math.max(0, maxY - minY);
@@ -523,7 +507,7 @@ function intersects(a, b) {
 
 function createNode(children) {
     return {
-        children: children,
+        children,
         height: 1,
         leaf: true,
         minX: Infinity,
@@ -537,8 +521,7 @@ function createNode(children) {
 // combines selection algorithm with binary divide & conquer approach
 
 function multiSelect(arr, left, right, n, compare) {
-    var stack = [left, right],
-        mid;
+    const stack = [left, right];
 
     while (stack.length) {
         right = stack.pop();
@@ -546,7 +529,7 @@ function multiSelect(arr, left, right, n, compare) {
 
         if (right - left <= n) continue;
 
-        mid = left + Math.ceil((right - left) / n / 2) * n;
+        const mid = left + Math.ceil((right - left) / n / 2) * n;
         quickselect(arr, mid, left, right, compare);
 
         stack.push(left, mid, mid, right);
