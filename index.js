@@ -20,7 +20,7 @@ rbush.prototype = {
         return this._all(this.data, []);
     },
 
-    search: function (bbox) {
+    search: function (bbox, predicate) {
 
         var node = this.data,
             result = [],
@@ -38,8 +38,15 @@ rbush.prototype = {
                 childBBox = node.leaf ? toBBox(child) : child;
 
                 if (intersects(bbox, childBBox)) {
-                    if (node.leaf) result.push(child);
-                    else if (contains(bbox, childBBox)) this._all(child, result);
+                    if (node.leaf) {
+                        if (predicate) {
+                            if (predicate(child)) {
+                                result.push(child);
+                            }
+                        } else {
+                            result.push(child);
+                        }
+                    } else if (contains(bbox, childBBox)) this._all(child, result, predicate);
                     else nodesToSearch.push(child);
                 }
             }
@@ -183,11 +190,21 @@ rbush.prototype = {
         return this;
     },
 
-    _all: function (node, result) {
+    _all: function (node, result, predicate) {
         var nodesToSearch = [];
         while (node) {
-            if (node.leaf) result.push.apply(result, node.children);
-            else nodesToSearch.push.apply(nodesToSearch, node.children);
+            if (node.leaf) {
+                if (predicate) {
+                    for (var i = 0; i < node.children.length; i++) {
+                        var child = node.children[i];
+                        if (predicate(child)) {
+                            result.push(child);
+                        }
+                    }
+                } else {
+                    result.push.apply(result, node.children);
+                }
+            } else nodesToSearch.push.apply(nodesToSearch, node.children);
 
             node = nodesToSearch.pop();
         }
