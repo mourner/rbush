@@ -17,39 +17,48 @@
   ],
   "author": "Vladimir Agafonkin",
   "license": "MIT",
-  "main": "index.js",
-  "jsdelivr": "rbush.js",
-  "unpkg": "rbush.js",
+  "main": "rbush.js",
+  "module": "index.js",
+  "browser": "rbush.min.js",
+  "jsdelivr": "rbush.min.js",
+  "unpkg": "rbush.min.js",
   "devDependencies": {
     "benchmark": "^2.1.4",
-    "browserify": "^14.5.0",
     "eslint": "^4.13.1",
     "eslint-config-mourner": "^2.0.3",
+    "esm": "^3.0.84",
     "faucet": "0.0.1",
-    "istanbul": "~0.4.5",
-    "tape": "^4.8.0",
-    "uglify-js": "^3.2.2"
+    "nyc": "^13.1.0",
+    "rollup": "^0.67.3",
+    "rollup-plugin-node-resolve": "^3.4.0",
+    "rollup-plugin-terser": "^3.0.0",
+    "tape": "^4.8.0"
   },
   "scripts": {
-    "test": "eslint index.js test/test.js && node test/test.js | faucet",
-    "perf": "node ./bench/perf.js",
-    "cov": "istanbul cover test/test.js -x test/test.js",
-    "build": "browserify index.js -s rbush -o rbush.js",
-    "build-min": "browserify index.js -s rbush | uglifyjs -c warnings=false -m > rbush.min.js",
-    "prepare": "npm run build && npm run build-min"
+    "pretest": "eslint index.js test/test.js ",
+    "test": "node -r esm test/test.js | faucet",
+    "perf": "node -r esm ./bench/perf.js",
+    "cov": "nyc --check-coverage --require esm npm test",
+    "build": "rollup -c",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
   },
   "files": [
+    "index.js",
     "rbush.js",
     "rbush.min.js"
   ],
   "eslintConfig": {
     "extends": "mourner",
+    "parserOptions": {
+      "sourceType": "module"
+    },
     "rules": {
       "new-cap": 0,
       "consistent-return": 0
     }
   },
   "dependencies": {
-    "quickselect": "^1.0.1"
+    "quickselect": "^2.0.0"
   }
 }

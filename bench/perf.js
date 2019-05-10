@@ -1,4 +1,4 @@
-'use strict';
+import rbush from '..';
 
 var N = 1000000,
     maxFill = 16;
@@ -30,8 +30,6 @@ var data2 = genData(N, 1);
 var bboxes100 = genData(1000, 100 * Math.sqrt(0.1));
 var bboxes10 = genData(1000, 10);
 var bboxes1 = genData(1000, 1);
-
-var rbush = typeof require !== 'undefined' ? require('..') : rbush;
 
 var tree = rbush(maxFill);
 

@@ -1,9 +1,8 @@
-'use strict';
 
 /*eslint key-spacing: 0, comma-spacing: 0 */
 
-var rbush = require('..'),
-    t = require('tape');
+import rbush from '..';
+import t from 'tape';
 
 function sortedEqual(t, a, b, compare) {
     compare = compare || defaultCompare;
