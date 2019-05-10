@@ -33,15 +33,15 @@ Install with NPM (`npm install rbush`), or use CDN links for browsers:
 ### Creating a Tree
 
 ```js
-var tree = rbush();
+const tree = new RBush();
 ```
 
-An optional argument to `rbush` defines the maximum number of entries in a tree node.
+An optional argument to `RBush` defines the maximum number of entries in a tree node.
 `9` (used by default) is a reasonable choice for most applications.
 Higher value means faster insertion and slower search, and vice versa.
 
 ```js
-var tree = rbush(16);
+const tree = new RBush(16);
 ```
 
 ### Adding Data
@@ -49,7 +49,7 @@ var tree = rbush(16);
 Insert an item:
 
 ```js
-var item = {
+const item = {
     minX: 20,
     minY: 40,
     maxX: 30,
@@ -72,7 +72,7 @@ However, you can pass a custom `equals` function to compare by value for removal
 which is useful when you only have a copy of the object you need removed (e.g. loaded from server):
 
 ```js
-tree.remove(itemCopy, function (a, b) {
+tree.remove(itemCopy, (a, b) => {
     return a.id === b.id;
 });
 ```
@@ -87,12 +87,16 @@ tree.clear();
 
 By default, RBush assumes the format of data points to be an object
 with `minX`, `minY`, `maxX` and `maxY` properties.
-You can customize this by providing an array with corresponding accessor strings
-as a second argument to `rbush` like this:
+You can customize this by overriding `toBBox`, `compareMinX` and `compareMinY` methods like this:
 
 ```js
-var tree = rbush(9, ['[0]', '[1]', '[0]', '[1]']); // accept [x, y] points
-tree.insert([20, 50]);
+class MyRBush extends RBush {
+    toBBox([x, y]) { return {minX: x, minY: y, maxX: x, maxY: y}; }
+    compareMinX(a, b) { return a.x - b.x; }
+    compareMinY(a, b) { return a.y - b.y; }
+}
+const tree = new MyRBush();
+tree.insert([20, 50]); // accepts [x, y] points
 ```
 
 If you're indexing a static list of points (you don't need to add/remove points after indexing), you should use [kdbush](https://github.com/mourner/kdbush) which performs point indexing 5-8x faster than RBush.
@@ -119,7 +123,7 @@ but makes query performance worse if the data is scattered.
 ### Search
 
 ```js
-var result = tree.search({
+const result = tree.search({
     minX: 40,
     minY: 20,
     maxX: 80,
@@ -130,10 +134,10 @@ var result = tree.search({
 Returns an array of data items (points or rectangles) that the given bounding box intersects.
 
 Note that the `search` method accepts a bounding box in `{minX, minY, maxX, maxY}` format
-regardless of the format specified in the constructor (which only affects inserted objects).
+regardless of the data format.
 
 ```js
-var allItems = tree.all();
+const allItems = tree.all();
 ```
 
 Returns all items of the tree.
@@ -141,7 +145,7 @@ Returns all items of the tree.
 ### Collisions
 
 ```js
-var result = tree.collides({minX: 40, minY: 20, maxX: 80, maxY: 70});
+const result = tree.collides({minX: 40, minY: 20, maxX: 80, maxY: 70});
 ```
 
 Returns `true` if there are any items intersecting the given bounding box, otherwise `false`.
@@ -151,10 +155,10 @@ Returns `true` if there are any items intersecting the given bounding box, other
 
 ```js
 // export data as JSON object
-var treeData = tree.toJSON();
+const treeData = tree.toJSON();
 
 // import previously exported data
-var tree = rbush(9).fromJSON(treeData);
+const tree = rbush(9).fromJSON(treeData);
 ```
 
 Importing and exporting as JSON allows you to use RBush on both the server (using Node.js) and the browser combined,
@@ -204,14 +208,14 @@ bulk-insert 1M items         | 1.25s  | n/a    | 6.7x
 ```bash
 npm install  # install dependencies
 
-npm test     # check the code with JSHint and run tests
+npm test     # lint the code and run tests
 npm run perf # run performance benchmarks
-npm run cov  # report test coverage (with more detailed report in coverage/lcov-report/index.html)
+npm run cov  # report test coverage
 ```
 
 ## Compatibility
 
-RBush should run on Node and all major browsers. The only caveat: IE 8 needs an [Array#indexOf polyfill](https://developer.mozilla.org/en/docs/Web/JavaScript/Reference/Global_Objects/Array/indexOf#Polyfill) for `remove` method to work.
+RBush should run on Node and all major browsers that support ES5.
 
 ## Changelog
 
