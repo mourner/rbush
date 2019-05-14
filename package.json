@@ -35,12 +35,11 @@
     "tape": "^4.10.1"
   },
   "scripts": {
-    "pretest": "eslint index.js test/test.js",
+    "pretest": "eslint index.js test/test.js bench/*.js",
     "test": "tape -r esm test/test.js",
     "perf": "node -r esm ./bench/perf.js",
     "cov": "c8 npm run test",
     "build": "rollup -c",
-    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "files": [
