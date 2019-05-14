@@ -2,8 +2,8 @@ import Benchmark from 'benchmark';
 import RBush from '../index.js';
 import {generate} from './gendata';
 
-const N = 10000,
-    maxFill = 16;
+const N = 10000;
+const maxFill = 16;
 
 const data = generate(N, 1);
 const bboxes100 = generate(1000, 100 * Math.sqrt(0.1));
@@ -11,23 +11,23 @@ const bboxes10 = generate(1000, 10);
 const bboxes1 = generate(1000, 1);
 
 const tree = new RBush(maxFill);
-for (var i = 0; i < N; i++) {
+for (let i = 0; i < N; i++) {
     tree.insert(data[i]);
 }
 
 new Benchmark.Suite()
     .add(`1000 searches 10% after bulk loading ${N}`, () => {
-        for (i = 0; i < 1000; i++) {
+        for (let i = 0; i < 1000; i++) {
             tree.search(bboxes100[i]);
         }
     })
     .add(`1000 searches 1% after bulk loading ${N}`, () => {
-        for (i = 0; i < 1000; i++) {
+        for (let i = 0; i < 1000; i++) {
             tree.search(bboxes10[i]);
         }
     })
     .add(`1000 searches 0.01% after bulk loading ${N}`, () => {
-        for (i = 0; i < 1000; i++) {
+        for (let i = 0; i < 1000; i++) {
             tree.search(bboxes1[i]);
         }
     })
