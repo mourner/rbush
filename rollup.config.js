@@ -5,7 +5,7 @@ import buble from 'rollup-plugin-buble';
 const output = (file, plugins) => ({
     input: 'index.js',
     output: {
-        name: 'rbush',
+        name: 'RBush',
         format: 'umd',
         indent: false,
         file
