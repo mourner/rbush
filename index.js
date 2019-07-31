@@ -346,7 +346,7 @@ export default class RBush {
             }
         }
 
-        return index;
+        return index || M - m;
     }
 
     // sorts node children by the best axis for split

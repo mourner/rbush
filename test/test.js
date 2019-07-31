@@ -174,6 +174,8 @@ t('#insert handles the insertion of maxEntries + 2 empty bboxes', (t) => {
 
     t.equal(tree.toJSON().height, 2);
     sortedEqual(t, tree.all(), emptyData);
+    t.equal(tree.data.children[0].children.length, 4);
+    t.equal(tree.data.children[1].children.length, 2);
 
     t.end();
 });
