@@ -30,6 +30,16 @@ Install with NPM (`npm install rbush`), or use CDN links for browsers:
 
 ## Usage
 
+### Importing RBush
+
+```js
+// as a ES module
+import RBush from 'rbush';
+
+// as a CommonJS module
+const RBush = require('rbush');
+```
+
 ### Creating a Tree
 
 ```js
