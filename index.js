@@ -202,7 +202,7 @@ rbush.prototype = {
 
         var N = right - left + 1,
             M = this._maxEntries,
-            node;
+            node, i;
 
         if (N <= M) {
             // reached leaf level; return leaf
@@ -219,6 +219,20 @@ rbush.prototype = {
             M = Math.ceil(N / Math.pow(M, height - 1));
         }
 
+        var minX = Infinity;
+        var minY = Infinity;
+        var maxX = -Infinity;
+        var maxY = -Infinity;
+        for (i = left; i <= right; i++) {
+            var bbox = this.toBBox(items[i]);
+            minX = Math.min(minX, bbox.minX);
+            minY = Math.min(minY, bbox.minY);
+            maxX = Math.max(maxX, bbox.maxX);
+            maxY = Math.max(maxY, bbox.maxY);
+        }
+
+        var ratio = (maxX - minX) / (maxY - minY) || 1;
+
         node = createNode([]);
         node.leaf = false;
         node.height = height;
@@ -226,8 +240,8 @@ rbush.prototype = {
         // split the items into M mostly square tiles
 
         var N2 = Math.ceil(N / M),
-            N1 = N2 * Math.ceil(Math.sqrt(M)),
-            i, j, right2, right3;
+            N1 = N2 * Math.max(1, Math.round(Math.sqrt(M / ratio))),
+            j, right2, right3;
 
         multiSelect(items, left, right, N1, this.compareMinX);
 

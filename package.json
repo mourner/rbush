@@ -19,6 +19,7 @@
   "license": "MIT",
   "main": "index.js",
   "devDependencies": {
+    "all-the-cities": "^2.0.0",
     "benchmark": "^2.1.0",
     "browserify": "^14.1.0",
     "eslint": "^3.18.0",

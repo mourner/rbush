@@ -1,4 +1,5 @@
-var W = 700,
+var W = 800,
+    H = 400,
     canvas = document.getElementById('canvas'),
     ctx = canvas.getContext('2d');
 
@@ -12,7 +13,7 @@ if (window.devicePixelRatio > 1) {
 
 function randBox(size) {
     var x = Math.random() * (W - size),
-        y = Math.random() * (W - size);
+        y = Math.random() * (H - size);
     return {
         minX: x,
         minY: y,
@@ -23,7 +24,7 @@ function randBox(size) {
 
 function randClusterPoint(dist) {
     var x = dist + Math.random() * (W - dist * 2),
-        y = dist + Math.random() * (W - dist * 2);
+        y = dist + Math.random() * (H - dist * 2);
     return {x: x, y: y};
 }
 
@@ -49,7 +50,7 @@ function drawTree(node, level) {
     var rect = [];
 
     rect.push(level ? colors[(node.height - 1) % colors.length] : 'grey');
-    rect.push(level ? 1 / Math.pow(level, 1.2) : 0.2);
+    rect.push(level ? 10 * Math.pow(0.4, level) : 0.2);
     rect.push([
         Math.round(node.minX),
         Math.round(node.minY),
@@ -60,7 +61,7 @@ function drawTree(node, level) {
     rects.push(rect);
 
     if (node.leaf) return;
-    if (level === 6) { return; }
+    if (level === MAX_LEVEL) { return; }
 
     for (var i = 0; i < node.children.length; i++) {
         drawTree(node.children[i], level + 1);
@@ -73,9 +74,17 @@ function draw() {
 
     ctx.clearRect(0, 0, W + 1, W + 1);
 
+    ctx.fillStyle = '#999';
+    ctx.beginPath();
+    for (var i = 0; i < data.length; i++) {
+        ctx.rect(data[i].minX - 1, data[i].minY - 1, 1, 1);
+    }
+    ctx.fill();
+
     for (var i = rects.length - 1; i >= 0; i--) {
         ctx.strokeStyle = rects[i][0];
-        ctx.globalAlpha = rects[i][1];
+        ctx.lineWidth = rects[i][1];
+        // ctx.globalAlpha = rects[i][1];
         ctx.strokeRect.apply(ctx, rects[i][2]);
     }
 }
