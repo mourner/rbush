@@ -1,0 +1,31 @@
+name: Node
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Use Node ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Install dependencies with Yarn
+      run: yarn install --frozen-lockfile
+
+    - name: Build the bundle
+      run: yarn run build
+
+    - name: Run tests
+      run: yarn test

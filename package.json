@@ -40,7 +40,7 @@
     "perf": "node -r esm ./bench/perf.js",
     "cov": "c8 npm run test",
     "build": "rollup -c",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run test && npm run build"
   },
   "files": [
     "index.js",
