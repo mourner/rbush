@@ -23,14 +23,14 @@
   "jsdelivr": "rbush.min.js",
   "unpkg": "rbush.min.js",
   "devDependencies": {
+    "@rollup/plugin-buble": "^0.21.1",
+    "@rollup/plugin-node-resolve": "^7.1.1",
     "benchmark": "^2.1.4",
     "c8": "^7.1.0",
     "eslint": "^6.8.0",
     "eslint-config-mourner": "^3.0.0",
     "esm": "^3.2.25",
-    "rollup": "^2.0.6",
-    "rollup-plugin-buble": "^0.19.8",
-    "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup": "^2.2.0",
     "rollup-plugin-terser": "^5.3.0",
     "tape": "^4.13.2"
   },
