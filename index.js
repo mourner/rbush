@@ -476,8 +476,8 @@ function contains(a, b) {
 function intersects(a, b) {
     return b.minX < a.maxX &&
            b.minY < a.maxY &&
-           b.maxX >= a.minX &&
-           b.maxY >= a.minY;
+           b.maxX > a.minX &&
+           b.maxY > a.minY;
 }
 
 function createNode(children) {
