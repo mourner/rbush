@@ -18,7 +18,7 @@
   "author": "Vladimir Agafonkin",
   "license": "MIT",
   "main": "rbush.js",
-  "module": "index.js",
+  "module": "rbush.esm.js",
   "browser": "rbush.min.js",
   "jsdelivr": "rbush.min.js",
   "unpkg": "rbush.min.js",
@@ -45,7 +45,8 @@
   "files": [
     "index.js",
     "rbush.js",
-    "rbush.min.js"
+    "rbush.min.js",
+    "rbush.esm.js"
   ],
   "eslintConfig": {
     "extends": "mourner"
