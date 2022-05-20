@@ -234,14 +234,14 @@ t('#collides returns true when search finds matching points', (t) => {
 });
 
 t('#search returns an empty array if nothing found', (t) => {
-    const result = new RBush(4).load(data).search([200, 200, 210, 210]);
+    const result = new RBush(4).load(data).search(arrToBBox([200, 200, 210, 210]));
 
     t.same(result, []);
     t.end();
 });
 
 t('#collides returns false if nothing found', (t) => {
-    const result = new RBush(4).load(data).collides([200, 200, 210, 210]);
+    const result = new RBush(4).load(data).collides(arrToBBox([200, 200, 210, 210]));
 
     t.same(result, false);
     t.end();
@@ -332,7 +332,7 @@ t('#remove removes items correctly', (t) => {
 t('#remove does nothing if nothing found', (t) => {
     t.same(
         new RBush().load(data),
-        new RBush().load(data).remove([13, 13, 13, 13]));
+        new RBush().load(data).remove(arrToBBox([13, 13, 13, 13])));
     t.end();
 });
 t('#remove does nothing if given undefined', (t) => {
