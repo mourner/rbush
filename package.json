@@ -18,6 +18,7 @@
   "author": "Vladimir Agafonkin",
   "license": "MIT",
   "type": "module",
+  "exports": "./index.js",
   "main": "rbush.js",
   "module": "index.js",
   "browser": "rbush.min.js",
@@ -28,18 +29,15 @@
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.4",
     "benchmark": "^2.1.4",
-    "c8": "^7.1.0",
-    "eslint": "^6.8.0",
-    "eslint-config-mourner": "^3.0.0",
-    "esm": "^3.2.25",
-    "rollup": "^4.18.0",
-    "tape": "^4.13.2"
+    "eslint": "^9.5.0",
+    "eslint-config-mourner": "^4.0.1",
+    "rollup": "^4.18.0"
   },
   "scripts": {
     "pretest": "eslint index.js test/test.js bench/*.js",
-    "test": "tape -r esm test/test.js",
-    "perf": "node -r esm ./bench/perf.js",
-    "cov": "c8 npm run test",
+    "test": "node --test",
+    "perf": "node ./bench/perf.js",
+    "cov": "node --test --experimental-test-coverage",
     "build": "rollup -c",
     "prepublishOnly": "npm run test && npm run build"
   },
@@ -48,9 +46,6 @@
     "rbush.js",
     "rbush.min.js"
   ],
-  "eslintConfig": {
-    "extends": "mourner"
-  },
   "dependencies": {
     "quickselect": "^2.0.0"
   }

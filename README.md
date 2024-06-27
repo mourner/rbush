@@ -9,7 +9,7 @@ that allows you to perform queries like "all items within this bounding box" ver
 (e.g. hundreds of times faster than looping over all items).
 It's most commonly used in maps and data visualizations.
 
-[![Build Status](https://github.com/mourner/rbush/workflows/Node/badge.svg?branch=master)](https://github.com/mourner/rbush/actions)
+[![Build Status](https://github.com/mourner/rbush/workflows/Node/badge.svg?branch=main)](https://github.com/mourner/rbush/actions)
 [![](https://img.shields.io/badge/simply-awesome-brightgreen.svg)](https://github.com/mourner/projects)
 
 ## Demos

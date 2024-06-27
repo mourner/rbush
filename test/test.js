@@ -1,12 +1,12 @@
 
-/*eslint key-spacing: 0, comma-spacing: 0 */
+/*eslint @stylistic/js/key-spacing: 0, @stylistic/js/comma-spacing: 0 */
 
 import RBush from '../index.js';
-import t from 'tape';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-function sortedEqual(t, a, b, compare) {
-    compare = compare || defaultCompare;
-    t.same(a.slice().sort(compare), b.slice().sort(compare));
+function sortedEqual(a, b, compare = defaultCompare) {
+    assert.deepEqual(a.slice().sort(compare), b.slice().sort(compare));
 }
 
 function defaultCompare(a, b) {
@@ -37,7 +37,7 @@ const emptyData = [[-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infin
     [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity],
     [-Infinity, -Infinity, Infinity, Infinity],[-Infinity, -Infinity, Infinity, Infinity]].map(arrToBBox);
 
-t('allows custom formats by overriding some methods', (t) => {
+test('allows custom formats by overriding some methods', () => {
     class MyRBush extends RBush {
         toBBox(a) {
             return {
@@ -55,21 +55,19 @@ t('allows custom formats by overriding some methods', (t) => {
         }
     }
     const tree = new MyRBush(4);
-    t.same(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}),
+    assert.deepEqual(tree.toBBox({minLng: 1, minLat: 2, maxLng: 3, maxLat: 4}),
         {minX: 1, minY: 2, maxX: 3, maxY: 4});
-    t.end();
 });
 
-t('constructor uses 9 max entries by default', (t) => {
+test('constructor uses 9 max entries by default', () => {
     const tree = new RBush().load(someData(9));
-    t.equal(tree.toJSON().height, 1);
+    assert.equal(tree.toJSON().height, 1);
 
     const tree2 = new RBush().load(someData(10));
-    t.equal(tree2.toJSON().height, 2);
-    t.end();
+    assert.equal(tree2.toJSON().height, 2);
 });
 
-t('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data structures', (t) => {
+test('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data structures', () => {
 
     const tree = new RBush(4);
     tree.toBBox = item => ({
@@ -94,45 +92,43 @@ t('#toBBox, #compareMinX, #compareMinY can be overriden to allow custom data str
         return a.minLng - b.minLng || a.minLat - b.minLat;
     }
 
-    sortedEqual(t, tree.search({minX: -180, minY: -90, maxX: 180, maxY: 90}), [
+    sortedEqual(tree.search({minX: -180, minY: -90, maxX: 180, maxY: 90}), [
         {minLng: -115, minLat:  45, maxLng: -105, maxLat:  55},
         {minLng:  105, minLat:  45, maxLng:  115, maxLat:  55},
         {minLng:  105, minLat: -55, maxLng:  115, maxLat: -45},
         {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
     ], byLngLat);
 
-    sortedEqual(t, tree.search({minX: -180, minY: -90, maxX: 0, maxY: 90}), [
+    sortedEqual(tree.search({minX: -180, minY: -90, maxX: 0, maxY: 90}), [
         {minLng: -115, minLat:  45, maxLng: -105, maxLat:  55},
         {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
     ], byLngLat);
 
-    sortedEqual(t, tree.search({minX: 0, minY: -90, maxX: 180, maxY: 90}), [
+    sortedEqual(tree.search({minX: 0, minY: -90, maxX: 180, maxY: 90}), [
         {minLng: 105, minLat:  45, maxLng: 115, maxLat:  55},
         {minLng: 105, minLat: -55, maxLng: 115, maxLat: -45}
     ], byLngLat);
 
-    sortedEqual(t, tree.search({minX: -180, minY: 0, maxX: 180, maxY: 90}), [
+    sortedEqual(tree.search({minX: -180, minY: 0, maxX: 180, maxY: 90}), [
         {minLng: -115, minLat: 45, maxLng: -105, maxLat: 55},
         {minLng:  105, minLat: 45, maxLng:  115, maxLat: 55}
     ], byLngLat);
 
-    sortedEqual(t, tree.search({minX: -180, minY: -90, maxX: 180, maxY: 0}), [
+    sortedEqual(tree.search({minX: -180, minY: -90, maxX: 180, maxY: 0}), [
         {minLng:  105, minLat: -55, maxLng:  115, maxLat: -45},
         {minLng: -115, minLat: -55, maxLng: -105, maxLat: -45}
     ], byLngLat);
 
-    t.end();
 });
 
-t('#load bulk-loads the given data given max node entries and forms a proper search tree', (t) => {
+test('#load bulk-loads the given data given max node entries and forms a proper search tree', () => {
 
     const tree = new RBush(4).load(data);
-    sortedEqual(t, tree.all(), data);
+    sortedEqual(tree.all(), data);
 
-    t.end();
 });
 
-t('#load uses standard insertion when given a low number of items', (t) => {
+test('#load uses standard insertion when given a low number of items', () => {
 
     const tree = new RBush(8)
         .load(data)
@@ -144,54 +140,49 @@ t('#load uses standard insertion when given a low number of items', (t) => {
         .insert(data[1])
         .insert(data[2]);
 
-    t.same(tree.toJSON(), tree2.toJSON());
-    t.end();
+    assert.deepEqual(tree.toJSON(), tree2.toJSON());
 });
 
-t('#load does nothing if loading empty data', (t) => {
+test('#load does nothing if loading empty data', () => {
     const tree = new RBush().load([]);
 
-    t.same(tree.toJSON(), new RBush().toJSON());
-    t.end();
+    assert.deepEqual(tree.toJSON(), new RBush().toJSON());
 });
 
-t('#load handles the insertion of maxEntries + 2 empty bboxes', (t) => {
+test('#load handles the insertion of maxEntries + 2 empty bboxes', () => {
     const tree = new RBush(4)
         .load(emptyData);
 
-    t.equal(tree.toJSON().height, 2);
-    sortedEqual(t, tree.all(), emptyData);
+    assert.equal(tree.toJSON().height, 2);
+    sortedEqual(tree.all(), emptyData);
 
-    t.end();
 });
 
-t('#insert handles the insertion of maxEntries + 2 empty bboxes', (t) => {
+test('#insert handles the insertion of maxEntries + 2 empty bboxes', () => {
     const tree = new RBush(4);
 
     emptyData.forEach((datum) => {
         tree.insert(datum);
     });
 
-    t.equal(tree.toJSON().height, 2);
-    sortedEqual(t, tree.all(), emptyData);
-    t.equal(tree.data.children[0].children.length, 4);
-    t.equal(tree.data.children[1].children.length, 2);
+    assert.equal(tree.toJSON().height, 2);
+    sortedEqual(tree.all(), emptyData);
+    assert.equal(tree.data.children[0].children.length, 4);
+    assert.equal(tree.data.children[1].children.length, 2);
 
-    t.end();
 });
 
-t('#load properly splits tree root when merging trees of the same height', (t) => {
+test('#load properly splits tree root when merging trees of the same height', () => {
     const tree = new RBush(4)
         .load(data)
         .load(data);
 
-    t.equal(tree.toJSON().height, 4);
-    sortedEqual(t, tree.all(), data.concat(data));
+    assert.equal(tree.toJSON().height, 4);
+    sortedEqual(tree.all(), data.concat(data));
 
-    t.end();
 });
 
-t('#load properly merges data of smaller or bigger tree heights', (t) => {
+test('#load properly merges data of smaller or bigger tree heights', () => {
     const smaller = someData(10);
 
     const tree1 = new RBush(4)
@@ -202,72 +193,65 @@ t('#load properly merges data of smaller or bigger tree heights', (t) => {
         .load(smaller)
         .load(data);
 
-    t.equal(tree1.toJSON().height, tree2.toJSON().height);
+    assert.equal(tree1.toJSON().height, tree2.toJSON().height);
 
-    sortedEqual(t, tree1.all(), data.concat(smaller));
-    sortedEqual(t, tree2.all(), data.concat(smaller));
+    sortedEqual(tree1.all(), data.concat(smaller));
+    sortedEqual(tree2.all(), data.concat(smaller));
 
-    t.end();
 });
 
-t('#search finds matching points in the tree given a bbox', (t) => {
+test('#search finds matching points in the tree given a bbox', () => {
 
     const tree = new RBush(4).load(data);
     const result = tree.search({minX: 40, minY: 20, maxX: 80, maxY: 70});
 
-    sortedEqual(t, result, [
+    sortedEqual(result, [
         [70,20,70,20],[75,25,75,25],[45,45,45,45],[50,50,50,50],[60,60,60,60],[70,70,70,70],
         [45,20,45,20],[45,70,45,70],[75,50,75,50],[50,25,50,25],[60,35,60,35],[70,45,70,45]
     ].map(arrToBBox));
 
-    t.end();
 });
 
-t('#collides returns true when search finds matching points', (t) => {
+test('#collides returns true when search finds matching points', () => {
 
     const tree = new RBush(4).load(data);
     const result = tree.collides({minX: 40, minY: 20, maxX: 80, maxY: 70});
 
-    t.same(result, true);
+    assert.deepEqual(result, true);
 
-    t.end();
 });
 
-t('#search returns an empty array if nothing found', (t) => {
+test('#search returns an empty array if nothing found', () => {
     const result = new RBush(4).load(data).search(arrToBBox([200, 200, 210, 210]));
 
-    t.same(result, []);
-    t.end();
+    assert.deepEqual(result, []);
 });
 
-t('#collides returns false if nothing found', (t) => {
+test('#collides returns false if nothing found', () => {
     const result = new RBush(4).load(data).collides(arrToBBox([200, 200, 210, 210]));
 
-    t.same(result, false);
-    t.end();
+    assert.deepEqual(result, false);
 });
 
-t('#all returns all points in the tree', (t) => {
+test('#all returns all points in the tree', () => {
 
     const tree = new RBush(4).load(data);
     const result = tree.all();
 
-    sortedEqual(t, result, data);
-    sortedEqual(t, tree.search({minX: 0, minY: 0, maxX: 100, maxY: 100}), data);
+    sortedEqual(result, data);
+    sortedEqual(tree.search({minX: 0, minY: 0, maxX: 100, maxY: 100}), data);
 
-    t.end();
 });
 
-t('#toJSON & #fromJSON exports and imports search tree in JSON format', (t) => {
+test('#toJSON & #fromJSON exports and imports search tree in JSON format', () => {
 
     const tree = new RBush(4).load(data);
     const tree2 = new RBush(4).fromJSON(tree.data);
 
-    sortedEqual(t, tree.all(), tree2.all());
-    t.end();
+    sortedEqual(tree.all(), tree2.all());
 });
 
-t('#insert adds an item to an existing tree correctly', (t) => {
+test('#insert adds an item to an existing tree correctly', () => {
     const items = [
         [0, 0, 0, 0],
         [1, 1, 1, 1],
@@ -279,24 +263,22 @@ t('#insert adds an item to an existing tree correctly', (t) => {
     const tree = new RBush(4).load(items.slice(0, 3));
 
     tree.insert(items[3]);
-    t.equal(tree.toJSON().height, 1);
-    sortedEqual(t, tree.all(), items.slice(0, 4));
+    assert.equal(tree.toJSON().height, 1);
+    sortedEqual(tree.all(), items.slice(0, 4));
 
     tree.insert(items[4]);
-    t.equal(tree.toJSON().height, 2);
-    sortedEqual(t, tree.all(), items);
+    assert.equal(tree.toJSON().height, 2);
+    sortedEqual(tree.all(), items);
 
-    t.end();
 });
 
-t('#insert does nothing if given undefined', (t) => {
-    t.same(
+test('#insert does nothing if given undefined', () => {
+    assert.deepEqual(
         new RBush().load(data),
         new RBush().load(data).insert());
-    t.end();
 });
 
-t('#insert forms a valid tree if items are inserted one by one', (t) => {
+test('#insert forms a valid tree if items are inserted one by one', () => {
     const tree = new RBush(4);
 
     for (let i = 0; i < data.length; i++) {
@@ -305,13 +287,12 @@ t('#insert forms a valid tree if items are inserted one by one', (t) => {
 
     const tree2 = new RBush(4).load(data);
 
-    t.ok(tree.toJSON().height - tree2.toJSON().height <= 1);
+    assert.ok(tree.toJSON().height - tree2.toJSON().height <= 1);
 
-    sortedEqual(t, tree.all(), tree2.all());
-    t.end();
+    sortedEqual(tree.all(), tree2.all());
 });
 
-t('#remove removes items correctly', (t) => {
+test('#remove removes items correctly', () => {
     const tree = new RBush(4).load(data);
 
     const len = data.length;
@@ -324,34 +305,28 @@ t('#remove removes items correctly', (t) => {
     tree.remove(data[len - 2]);
     tree.remove(data[len - 3]);
 
-    sortedEqual(t,
-        data.slice(3, len - 3),
-        tree.all());
-    t.end();
+    sortedEqual(data.slice(3, len - 3), tree.all());
 });
-t('#remove does nothing if nothing found', (t) => {
-    t.same(
+test('#remove does nothing if nothing found', () => {
+    assert.deepEqual(
         new RBush().load(data),
         new RBush().load(data).remove(arrToBBox([13, 13, 13, 13])));
-    t.end();
 });
-t('#remove does nothing if given undefined', (t) => {
-    t.same(
+test('#remove does nothing if given undefined', () => {
+    assert.deepEqual(
         new RBush().load(data),
         new RBush().load(data).remove());
-    t.end();
 });
-t('#remove brings the tree to a clear state when removing everything one by one', (t) => {
+test('#remove brings the tree to a clear state when removing everything one by one', () => {
     const tree = new RBush(4).load(data);
 
     for (let i = 0; i < data.length; i++) {
         tree.remove(data[i]);
     }
 
-    t.same(tree.toJSON(), new RBush(4).toJSON());
-    t.end();
+    assert.deepEqual(tree.toJSON(), new RBush(4).toJSON());
 });
-t('#remove accepts an equals function', (t) => {
+test('#remove accepts an equals function', () => {
     const tree = new RBush(4).load(data);
 
     const item = {minX: 20, minY: 70, maxX: 20, maxY: 70, foo: 'bar'};
@@ -359,23 +334,20 @@ t('#remove accepts an equals function', (t) => {
     tree.insert(item);
     tree.remove(JSON.parse(JSON.stringify(item)), (a, b) => a.foo === b.foo);
 
-    sortedEqual(t, tree.all(), data);
-    t.end();
+    sortedEqual(tree.all(), data);
 });
 
-t('#clear should clear all the data in the tree', (t) => {
-    t.same(
+test('#clear should clear all the data in the tree', () => {
+    assert.deepEqual(
         new RBush(4).load(data).clear().toJSON(),
         new RBush(4).toJSON());
-    t.end();
 });
 
-t('should have chainable API', (t) => {
-    t.doesNotThrow(() => {
+test('should have chainable API', () => {
+    assert.doesNotThrow(() => {
         new RBush()
             .load(data)
             .insert(data[0])
             .remove(data[0]);
     });
-    t.end();
 });
