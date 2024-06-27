@@ -9,7 +9,7 @@ that allows you to perform queries like "all items within this bounding box" ver
 (e.g. hundreds of times faster than looping over all items).
 It's most commonly used in maps and data visualizations.
 
-[![Build Status](https://github.com/mourner/rbush/workflows/Node/badge.svg?branch=main)](https://github.com/mourner/rbush/actions)
+[![Node](https://github.com/mourner/rbush/actions/workflows/node.yml/badge.svg)](https://github.com/mourner/rbush/actions/workflows/node.yml)
 [![](https://img.shields.io/badge/simply-awesome-brightgreen.svg)](https://github.com/mourner/projects)
 
 ## Demos
@@ -30,14 +30,26 @@ Install with NPM (`npm install rbush`), or use CDN links for browsers:
 
 ## Usage
 
-### Importing RBush
+### Installing RBush
+
+Install with NPM: `npm install rbush`, then import as a module:
 
 ```js
-// as a ES module
 import RBush from 'rbush';
+```
 
-// as a CommonJS module
-const RBush = require('rbush');
+Or use as a module directly in the browser with [jsDelivr](https://www.jsdelivr.com/esm):
+
+```html
+<script type="module">
+    import RBush from 'https://cdn.jsdelivr.net/npm/rbush/+esm';
+</script>
+```
+
+Alternatively, there's a browser bundle with an `RBush` global variable:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/rbush"></script>
 ```
 
 ### Creating a Tree
@@ -216,8 +228,7 @@ bulk-insert 1M items         | 1.25s  | n/a    | 6.7x
 ## Development
 
 ```bash
-npm install  # install dependencies
-
+npm ci       # install dependencies
 npm test     # lint the code and run tests
 npm run perf # run performance benchmarks
 npm run cov  # report test coverage
@@ -225,4 +236,4 @@ npm run cov  # report test coverage
 
 ## Compatibility
 
-RBush should run on Node and all major browsers that support ES5.
+RBush v4+ is published as a ES module and no longer supports CommonJS environments. It works universally in modern browsers, but you can transpile the code on your end to support IE11.
