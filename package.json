@@ -15,7 +15,7 @@
     "index",
     "math"
   ],
-  "author": "Vladimir Agafonkin",
+  "author": "Volodymyr Agafonkin",
   "license": "MIT",
   "type": "module",
   "exports": "./index.js",

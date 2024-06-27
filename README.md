@@ -22,12 +22,6 @@ click to perform search under the cursor.
 * [randomly clustered data](http://mourner.github.io/rbush/viz/viz-cluster.html)
 * [uniformly distributed random data](http://mourner.github.io/rbush/viz/viz-uniform.html)
 
-## Install
-
-Install with NPM (`npm install rbush`), or use CDN links for browsers:
-[rbush.js](https://unpkg.com/rbush@2.0.1/rbush.js),
-[rbush.min.js](https://unpkg.com/rbush@2.0.1/rbush.min.js)
-
 ## Usage
 
 ### Installing RBush
