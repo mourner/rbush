@@ -24,6 +24,10 @@
   "browser": "rbush.min.js",
   "jsdelivr": "rbush.min.js",
   "unpkg": "rbush.min.js",
+  "exports": {
+    "import": "./index.js",
+    "require":  "./rbush.min.js"
+  },
   "devDependencies": {
     "@rollup/plugin-buble": "^1.0.3",
     "@rollup/plugin-node-resolve": "^15.2.3",
