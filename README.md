@@ -11,6 +11,7 @@ It's most commonly used in maps and data visualizations.
 
 [![Node](https://github.com/mourner/rbush/actions/workflows/node.yml/badge.svg)](https://github.com/mourner/rbush/actions/workflows/node.yml)
 [![](https://img.shields.io/badge/simply-awesome-brightgreen.svg)](https://github.com/mourner/projects)
+![](https://img.shields.io/bundlephobia/minzip/rbush)
 
 ## Demos
 
