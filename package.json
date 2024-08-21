@@ -19,7 +19,7 @@
   "license": "MIT",
   "type": "module",
   "exports": "./index.js",
-  "main": "rbush.js",
+  "main": "index.js",
   "module": "index.js",
   "browser": "rbush.min.js",
   "jsdelivr": "rbush.min.js",
