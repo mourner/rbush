@@ -100,6 +100,30 @@ Remove all items:
 tree.clear();
 ```
 
+**warning**
+
+The remove implementation relies on the coordinates of the object to be the same as when it was inserted.
+This is because the fn is optimised to only look for the object to remove in the sections of the tree it expects them to be in, based on the coordinates of the item being removed.
+
+This will cause issues
+
+```js
+    
+// bad    
+obj.minX += 5
+obj.maxX -= 5
+tree.remove(obj)
+tree.insert(obj)
+
+// you may end up with two copies of the object
+
+// good    
+tree.remove(obj)
+obj.minX += 5
+obj.maxX -= 5
+tree.insert(obj)
+``` 
+
 ### Data Format
 
 By default, RBush assumes the format of data points to be an object
