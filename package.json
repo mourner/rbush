@@ -27,7 +27,7 @@
   "devDependencies": {
     "@rollup/plugin-buble": "^1.0.3",
     "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "benchmark": "^2.1.4",
     "eslint": "^9.9.0",
     "eslint-config-mourner": "^4.0.2",
