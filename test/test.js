@@ -1,5 +1,5 @@
 
-/*eslint @stylistic/js/key-spacing: 0, @stylistic/js/comma-spacing: 0 */
+/*eslint @stylistic/key-spacing: 0, @stylistic/comma-spacing: 0 */
 
 import RBush from '../index.js';
 import test from 'node:test';
