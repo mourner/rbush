@@ -1,15 +1,25 @@
-// RBush v5 — step 3: real boxes, ordered by Hilbert value.
+// RBush v5 — step 3: real boxes, ordered by Hilbert value, with range search.
 //
-// Items are now axis-aligned boxes (minX, minY, maxX, maxY) with an auto-assigned id.
+// Items are axis-aligned boxes (minX, minY, maxX, maxY) with an auto-assigned id.
 // Each block is a flat run of items sorted by the Hilbert code of the box center, so
 // items near each other in space land near each other in the block — the ordering a
-// packed R-tree is built on. There's no tree yet: no node MBRs, no bottom-up packing,
-// no nodeSize sort-stop, and no search. Blocks are just sorted (box, id) runs carried
-// through the same binary-counter cascade as before.
+// packed R-tree is built on. A block is now a full packed Flatbush index: its leaf boxes
+// (Hilbert-sorted) followed by bottom-up node MBRs, so it can be searched on its own.
+// Blocks are carried through the same binary-counter cascade as before; a merge produces
+// a fresh leaf run and repacks the tree on top of it.
+//
+// search() runs the standard Flatbush range descent on every frozen block, linearly scans
+// the still-mutable buffer, and unions the results. Decomposability makes this correct:
+// the answer over the whole dataset is the union of the per-block / buffer answers.
 //
 // The Hilbert key is quantized into a FIXED domain shared by every block, so keys from
 // different blocks are directly comparable and the 2-way merge stays a linear key scan.
-// (Boxes themselves are kept full-precision for accurate search down the line.)
+// (Boxes themselves are kept full-precision for accurate search.)
+//
+// Per-block storage layout (held until serialization): each block owns separate typed
+// arrays — `boxes` (leaf MBRs then node MBRs, bottom-up), `indices` (leaf → global id,
+// node → child box offset), `keys` (leaf Hilbert keys, for merging), plus `numItems`,
+// `nodeSize`, `levelBounds`. Separate arrays make build/merge/replacement trivial.
 
 const HILBERT_MAX = (1 << 16) - 1;
 
@@ -17,9 +27,11 @@ export default class RBush {
     /**
      * @param {[number, number, number, number]} [domain] Coordinate bounds [minX, minY, maxX, maxY] for the Hilbert grid.
      * @param {number} [bufferSize=256] Items buffered before a block is frozen; also the smallest block size.
+     * @param {number} [nodeSize=16] Packed R-tree node size per block.
      */
-    constructor(domain = [0, 0, 1, 1], bufferSize = 256) {
+    constructor(domain = [0, 0, 1, 1], bufferSize = 256, nodeSize = 16) {
         this.bufferSize = bufferSize;
+        this.nodeSize = nodeSize;
         this.length = 0;                                // total number of items added, and the next id
 
         const [minX, minY, maxX, maxY] = domain;
@@ -31,7 +43,7 @@ export default class RBush {
         this._boxes = new Float64Array(bufferSize * 4);  // newest boxes, unsorted
         this._ids = new Uint32Array(bufferSize);         // their ids, parallel to _boxes
         this._n = 0;                                     // items currently in the buffer
-        this._blocks = [];                               // _blocks[i] = {keys, boxes, ids} at level i (or undefined)
+        this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
     }
 
     /**
@@ -63,36 +75,180 @@ export default class RBush {
             const y = (this._scaleY * ((boxes[p + 1] + boxes[p + 3]) / 2 - this._minY)) | 0;
             keys[i] = hilbert(clamp(x), clamp(y));
         }
-        sort(keys, this._boxes, this._ids, 0, this._n - 1); // sort by Hilbert key, boxes + ids follow
+        const n = this._n;
+        sort(keys, this._boxes, this._ids, 0, n - 1); // sort by Hilbert key, boxes + ids follow
 
-        let block = {keys, boxes: this._boxes.slice(), ids: this._ids.slice()};
+        // The carried value is a cheap leaf-only run (keys + leaf boxes + ids), packed into a
+        // full tree only once it settles. Intermediate carry blocks are immediately re-merged,
+        // so packing their node MBRs would be wasted work.
+        let run = {numItems: n, nodeSize: this.nodeSize, keys, boxes: this._boxes.slice(0, n * 4), indices: this._ids.slice(0, n)};
         this._n = 0;
 
         for (let level = 0; ; level++) {
             const existing = this._blocks[level];
             if (!existing) {
-                this._blocks[level] = block; // empty slot — settle here
+                this._blocks[level] = run; // empty slot — settle here as an unpacked leaf run
                 break;
             }
-            block = merge(existing, block); // collision — merge and carry to the next level
+            run = merge(existing, run); // collision — merge leaves and carry to the next level
             this._blocks[level] = undefined;
         }
+    }
+
+    /**
+     * Find all item ids whose box intersects (or touches) the query box.
+     * Runs the packed search on every frozen block, scans the buffer, and unions the results.
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     * @param {(id: number, minX: number, minY: number, maxX: number, maxY: number) => boolean} [filterFn]
+     * @returns {number[]}
+     */
+    search(minX, minY, maxX, maxY, filterFn) {
+        const results = [];
+
+        for (const block of this._blocks) {
+            if (!block) continue;
+            if (block.levelBounds === undefined) pack(block); // lazily build node MBRs on first search
+            searchBlock(block, minX, minY, maxX, maxY, filterFn, results);
+        }
+
+        // linear scan of the still-mutable buffer
+        const boxes = this._boxes, ids = this._ids;
+        for (let i = 0, p = 0; i < this._n; i++, p += 4) {
+            const x0 = boxes[p], y0 = boxes[p + 1], x1 = boxes[p + 2], y1 = boxes[p + 3];
+            if (maxX < x0 || maxY < y0 || minX > x1 || minY > y1) continue;
+            const id = ids[i];
+            if (filterFn === undefined || filterFn(id, x0, y0, x1, y1)) results.push(id);
+        }
+
+        return results;
     }
 }
 
 /**
- * 2-way merge of two Hilbert-sorted blocks into a new one; boxes + ids follow the keys.
- * @param {{keys: Uint32Array, boxes: Float64Array, ids: Uint32Array}} a
- * @param {{keys: Uint32Array, boxes: Float64Array, ids: Uint32Array}} b
+ * Lazily pack a settled leaf run into a full Flatbush-style block by generating its node
+ * MBRs bottom-up. This is deferred until the block is first searched: a block that gets
+ * merged away before any query never needs its tree (merge reads only leaves), so under an
+ * insert-heavy workload almost all packing is skipped. Mutates `block` in place (adds the
+ * node MBRs to `boxes`/`indices` and sets `levelBounds`); idempotent via the caller's guard.
+ * @param {{numItems: number, nodeSize: number, keys: Uint32Array, boxes: Float64Array, indices: Uint32Array, levelBounds?: number[]}} block
+ */
+function pack(block) {
+    const {numItems, nodeSize} = block;
+
+    // count nodes per level (Flatbush layout) and the box-offset bound of each level
+    let n = numItems, numNodes = n;
+    const levelBounds = [n * 4];
+    do {
+        n = Math.ceil(n / nodeSize);
+        numNodes += n;
+        levelBounds.push(numNodes * 4);
+    } while (n !== 1);
+
+    // grow the leaf arrays to hold node MBRs (the leaf portion stays valid for future merges)
+    const boxes = new Float64Array(numNodes * 4);
+    const indices = new Uint32Array(numNodes);
+    boxes.set(block.boxes.subarray(0, numItems * 4));
+    indices.set(block.indices.subarray(0, numItems));
+
+    // generate parent nodes level by level, bottom-up
+    let pos = 0;            // read cursor over the level below
+    let wp = numItems * 4;  // write cursor for new parent boxes
+    for (let i = 0; i < levelBounds.length - 1; i++) {
+        const end = levelBounds[i];
+        while (pos < end) {
+            const nodeIndex = pos;
+            let nodeMinX = boxes[pos++], nodeMinY = boxes[pos++], nodeMaxX = boxes[pos++], nodeMaxY = boxes[pos++];
+            for (let j = 1; j < nodeSize && pos < end; j++) {
+                if (boxes[pos] < nodeMinX) nodeMinX = boxes[pos]; pos++;
+                if (boxes[pos] < nodeMinY) nodeMinY = boxes[pos]; pos++;
+                if (boxes[pos] > nodeMaxX) nodeMaxX = boxes[pos]; pos++;
+                if (boxes[pos] > nodeMaxY) nodeMaxY = boxes[pos]; pos++;
+            }
+            indices[wp >> 2] = nodeIndex;
+            boxes[wp++] = nodeMinX; boxes[wp++] = nodeMinY; boxes[wp++] = nodeMaxX; boxes[wp++] = nodeMaxY;
+        }
+    }
+
+    block.boxes = boxes;
+    block.indices = indices;
+    block.levelBounds = levelBounds;
+}
+
+/**
+ * Standard Flatbush range descent over one packed block; pushes matching global ids into `results`.
+ * @param {{numItems: number, nodeSize: number, boxes: Float64Array, indices: Uint32Array, levelBounds: number[]}} block
+ * @param {number} minX
+ * @param {number} minY
+ * @param {number} maxX
+ * @param {number} maxY
+ * @param {((id: number, minX: number, minY: number, maxX: number, maxY: number) => boolean) | undefined} filterFn
+ * @param {number[]} results
+ */
+function searchBlock(block, minX, minY, maxX, maxY, filterFn, results) {
+    const boxes = block.boxes, indices = block.indices, levelBounds = block.levelBounds;
+    const nodeSize = block.nodeSize, leafEnd = block.numItems * 4;
+
+    let nodeIndex = boxes.length - 4; // root
+    const queue = [];
+
+    while (nodeIndex !== undefined) {
+        const end = Math.min(nodeIndex + nodeSize * 4, upperBound(nodeIndex, levelBounds));
+
+        for (let pos = nodeIndex; pos < end; pos += 4) {
+            const x0 = boxes[pos];
+            if (maxX < x0) continue;
+            const y0 = boxes[pos + 1];
+            if (maxY < y0) continue;
+            const x1 = boxes[pos + 2];
+            if (minX > x1) continue;
+            const y1 = boxes[pos + 3];
+            if (minY > y1) continue;
+
+            const index = indices[pos >> 2];
+            if (nodeIndex >= leafEnd) {
+                queue.push(index); // internal node — descend later
+            } else if (filterFn === undefined || filterFn(index, x0, y0, x1, y1)) {
+                results.push(index); // leaf — `index` is the global id
+            }
+        }
+
+        nodeIndex = queue.pop();
+    }
+}
+
+/**
+ * Binary search for the first level bound strictly greater than the given box offset.
+ * @param {number} value
+ * @param {number[]} arr
+ */
+function upperBound(value, arr) {
+    let i = 0, j = arr.length - 1;
+    while (i < j) {
+        const m = (i + j) >> 1;
+        if (arr[m] > value) j = m;
+        else i = m + 1;
+    }
+    return arr[i];
+}
+
+/**
+ * 2-way merge of two Hilbert-sorted leaf runs (or packed blocks — only their leaf portion
+ * is read) into a fresh leaf run. Node MBRs, if any, are ignored and not regenerated here;
+ * build() packs the tree once the run finally settles.
+ * @param {{numItems: number, nodeSize: number, keys: Uint32Array, boxes: Float64Array, indices: Uint32Array}} a
+ * @param {{numItems: number, nodeSize: number, keys: Uint32Array, boxes: Float64Array, indices: Uint32Array}} b
  */
 function merge(a, b) {
     // Hoist the six typed-array views into locals: the merge loop is the dominant cost,
     // and reading `a.keys`/`b.boxes`/… off the block object every iteration is a property
     // load V8 won't hoist across the loop. Pulling them out (and inlining the per-item
     // copy below) is ~22% faster on the merge itself.
-    const aKeys = a.keys, aBoxes = a.boxes, aIds = a.ids;
-    const bKeys = b.keys, bBoxes = b.boxes, bIds = b.ids;
-    const al = aKeys.length, bl = bKeys.length, n = al + bl;
+    const aKeys = a.keys, aBoxes = a.boxes, aIds = a.indices;
+    const bKeys = b.keys, bBoxes = b.boxes, bIds = b.indices;
+    const al = a.numItems, bl = b.numItems, n = al + bl;
     const keys = new Uint32Array(n);
     const boxes = new Float64Array(n * 4);
     const ids = new Uint32Array(n);
@@ -104,31 +260,31 @@ function merge(a, b) {
     let i = 0, j = 0, k = 0;
     while (i < al && j < bl) {
         let s, sb;
-        if (aKeys[i] <= bKeys[j]) { s = i++; keys[k] = aKeys[s]; ids[k] = aIds[s]; sb = aBoxes; }
-        else { s = j++; keys[k] = bKeys[s]; ids[k] = bIds[s]; sb = bBoxes; }
+        if (aKeys[i] <= bKeys[j]) { s = i++; keys[k] = aKeys[s]; ids[k] = aIds[s]; sb = aBoxes; } else { s = j++; keys[k] = bKeys[s]; ids[k] = bIds[s]; sb = bBoxes; }
         const sp = s * 4, dp = k * 4;
         boxes[dp] = sb[sp]; boxes[dp + 1] = sb[sp + 1]; boxes[dp + 2] = sb[sp + 2]; boxes[dp + 3] = sb[sp + 3];
         k++;
     }
-    // bulk-copy whichever input's tail remains (memcpy, much faster than per-item)
-    if (i < al) appendTail(aKeys, aBoxes, aIds, i, keys, boxes, ids, k);
-    else if (j < bl) appendTail(bKeys, bBoxes, bIds, j, keys, boxes, ids, k);
-    return {keys, boxes, ids};
+    // bulk-copy whichever input's leaf tail remains (memcpy, much faster than per-item)
+    if (i < al) appendTail(aKeys, aBoxes, aIds, i, al, keys, boxes, ids, k);
+    else if (j < bl) appendTail(bKeys, bBoxes, bIds, j, bl, keys, boxes, ids, k);
+    return {numItems: n, nodeSize: a.nodeSize, keys, boxes, indices: ids};
 }
 
-/** Append src[from..] into the output starting at slot k via bulk set(). */
-function appendTail(srcKeys, srcBoxes, srcIds, from, keys, boxes, ids, k) {
-    keys.set(srcKeys.subarray(from), k);
-    ids.set(srcIds.subarray(from), k);
-    boxes.set(srcBoxes.subarray(from * 4), k * 4);
+/** Append the leaf run src[from..numItems) into the output starting at slot k via bulk set(). */
+function appendTail(srcKeys, srcBoxes, srcIds, from, numItems, keys, boxes, ids, k) {
+    keys.set(srcKeys.subarray(from, numItems), k);
+    ids.set(srcIds.subarray(from, numItems), k);
+    boxes.set(srcBoxes.subarray(from * 4, numItems * 4), k * 4);
 }
 
-/** Concatenate two disjoint blocks (all of `lo` then all of `hi`) via bulk set(). */
+/** Concatenate two disjoint leaf runs (all of `lo` then all of `hi`) into a new run. */
 function concat(lo, hi, keys, boxes, ids) {
-    keys.set(lo.keys); keys.set(hi.keys, lo.keys.length);
-    ids.set(lo.ids); ids.set(hi.ids, lo.ids.length);
-    boxes.set(lo.boxes); boxes.set(hi.boxes, lo.boxes.length);
-    return {keys, boxes, ids};
+    const ll = lo.numItems, hl = hi.numItems;
+    keys.set(lo.keys.subarray(0, ll)); keys.set(hi.keys.subarray(0, hl), ll);
+    ids.set(lo.indices.subarray(0, ll)); ids.set(hi.indices.subarray(0, hl), ll);
+    boxes.set(lo.boxes.subarray(0, ll * 4)); boxes.set(hi.boxes.subarray(0, hl * 4), ll * 4);
+    return {numItems: ll + hl, nodeSize: lo.nodeSize, keys, boxes, indices: ids};
 }
 
 const SORT_STACK = new Uint32Array(64); // safe for quicksort over Uint32Array looping into the smaller side

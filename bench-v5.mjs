@@ -66,7 +66,7 @@ console.log(`inserts > 1ms: ${over1ms}, biggest spikes: ${spikes.sort((a, b) => 
 console.log(`${t._blocks.length} levels, ${t._blocks.filter(Boolean).length} blocks`);
 
 // static-build ceiling: bufSize = N → one quicksort, no merges (Flatbush-equivalent)
-const staticBest = bestOf(N).total;
+// const staticBest = bestOf(N).total;
 
-console.log(`static-build ceiling: ${staticBest.toFixed(1)} ms`);
-console.log(`incremental takes ~${(total / staticBest).toFixed(2)}× the static build`);
+// console.log(`static-build ceiling: ${staticBest.toFixed(1)} ms`);
+// console.log(`incremental takes ~${(total / staticBest).toFixed(2)}× the static build`);
