@@ -26,26 +26,18 @@
 
 const HILBERT_MAX = (1 << 16) - 1;
 
-/** Round `n` up to a whole number of nodeSize-wide nodes. @param {number} n @param {number} nodeSize */
-function roundUp(n, nodeSize) {
-    return Math.ceil(n / nodeSize) * nodeSize;
-}
-
 /**
  * Total node count of a packed tree over `numItems` leaves (leaves + bottom-up parent nodes,
- * Flatbush layout). Each non-root level is padded up to a full nodeSize multiple (so every node is
- * the same width and search needs no level-bound check — see pack()); the padding adds at most
- * nodeSize-1 boxes per level. No closed form, but a handful of iterations. Used to allocate a
- * block's `boxes`/`indices` at final packed size up front.
+ * Flatbush layout), every non-root level padded to a full nodeSize multiple (see pack()). Used to
+ * size a block's `boxes`/`indices` at final packed size up front.
  * @param {number} numItems
  * @param {number} nodeSize
  */
 function nodeCount(numItems, nodeSize) {
-    let e = numItems, count = 1;                       // + the single root node
+    let e = numItems, count = 1;
     while (e !== 1) {
-        e = roundUp(e, nodeSize);                      // pad this level to full nodes
-        count += e;
-        e /= nodeSize;                                 // its parent count (exact, since padded)
+        e = Math.ceil(e / nodeSize);
+        count += e * nodeSize;
     }
     return count;
 }
@@ -90,10 +82,9 @@ class RBlock {
     }
 
     /**
-     * Fill in this block's node MBRs bottom-up, in place (arrays are already full size), padding each
-     * level to a full nodeSize multiple so search needs no level-bound check. Deferred until first
-     * search: a block merged away before any query never needs its tree (merge reads only leaves), so
-     * under insert-heavy load almost all packing is skipped. Guarded by the caller's `packed` flag.
+     * Fill in this block's node MBRs bottom-up, in place (arrays are already full size). Deferred until
+     * first search: a block merged away before any query never needs its tree (merge reads only leaves),
+     * so under insert-heavy load almost all packing is skipped. Guarded by the caller's `packed` flag.
      */
     pack() {
         const {numItems, nodeSize, boxes, indices} = this;
@@ -101,17 +92,17 @@ class RBlock {
         // Build levels bottom-up: each level is read in nodeSize-wide groups, one parent MBR per
         // group, then padded to full nodes — so every level above the root is whole nodes and
         // search scans fixed-width. Start with the padded leaf level; the root stays unpadded.
-        let start = 0;                             // first box of the level being read
-        let count = roundUp(numItems, nodeSize);  // entries in it
+        let start = 0;
+        let count = Math.ceil(numItems / nodeSize) * nodeSize;
         padSentinels(boxes, numItems * 4, count * 4);
-        let wp = count * 4;                        // where the next level up is written
+        let wp = count * 4; // where the next level up is written
 
         while (count > 1) {
             const parentStart = wp;
             for (let pos = start, end = start + count * 4; pos < end;) {
                 const node = pos;
                 let minX = boxes[pos++], minY = boxes[pos++], maxX = boxes[pos++], maxY = boxes[pos++];
-                for (let j = 1; j < nodeSize; j++) { // sentinels are no-ops here
+                for (let j = 1; j < nodeSize; j++) {
                     if (boxes[pos] < minX) minX = boxes[pos]; pos++;
                     if (boxes[pos] < minY) minY = boxes[pos]; pos++;
                     if (boxes[pos] > maxX) maxX = boxes[pos]; pos++;
@@ -121,8 +112,9 @@ class RBlock {
                 boxes[wp++] = minX; boxes[wp++] = minY; boxes[wp++] = maxX; boxes[wp++] = maxY;
             }
             const numParents = count / nodeSize;
-            if (numParents === 1) break;           // wrote the root
-            count = roundUp(numParents, nodeSize); // pad this new level and move up to it
+            if (numParents === 1) break; // wrote the root
+
+            count = Math.ceil(numParents / nodeSize) * nodeSize; // pad this new level and move up to it
             padSentinels(boxes, wp, parentStart + count * 4);
             wp = parentStart + count * 4;
             start = parentStart;
@@ -179,15 +171,12 @@ class RBlock {
 }
 
 /**
- * Whole blocks are recycled through a free list keyed by item count rather than reallocated. A
- * merge relieves its two inputs (the carried-away level) and produces a larger output; since block
- * sizes are a small fixed B·2^k set and a block's three arrays are all sized from `numItems`, a
- * relieved level-i block is exactly what the next level-i block needs — so it goes back whole and
- * the next same-size block reuses its arrays in place. They're handed back dirty (`packed` reset,
- * contents not) — no zero-fill: the leaf portion is fully overwritten by the
- * merge/freeze copy, and the node tail by pack() before any search reads it, so stale contents are
- * never observed. The cascade frees blocks in same-size pairs, so a level needs up to two free at
- * once — hence a free *list* per size, not a single dormant slot.
+ * Take a block of `numItems` from the pool, or allocate one. Blocks are recycled whole rather than
+ * reallocated: sizes are a fixed B·2^k set and a block's three arrays are all sized from `numItems`,
+ * so a relieved level-i block is exactly what the next level-i block needs. Recycled blocks come back
+ * dirty — no zero-fill, since the leaf portion is overwritten on freeze/merge and the node tail by
+ * pack() before any search reads it. The cascade frees same-size pairs, so the pool keeps a list per
+ * size, not a single slot.
  * @param {Map<number, RBlock[]>} pool keyed by numItems
  * @param {number} numItems
  * @param {number} nodeSize
