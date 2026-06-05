@@ -26,6 +26,11 @@ for (let i = 0; i < QN; i++) {
 const t5 = new RBushV5([0, 0, W, W], B);
 for (let i = 0; i < N; i++) t5.add(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
 
+// single-block ceiling: bufferSize = N → everything lands in one packed block, i.e. a
+// static Flatbush-equivalent index. Isolates the cost of the multi-block search union.
+const t5static = new RBushV5([0, 0, W, W], N);
+for (let i = 0; i < N; i++) t5static.add(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
+
 const t4 = new RBushV4();
 const v4items = [];
 for (let i = 0; i < N; i++) v4items.push({minX: data[i * 4], minY: data[i * 4 + 1], maxX: data[i * 4 + 2], maxY: data[i * 4 + 3]});
@@ -35,6 +40,12 @@ function benchV5() {
     let found = 0;
     const t0 = performance.now();
     for (let i = 0; i < QN; i++) found += t5.search(queries[i * 4], queries[i * 4 + 1], queries[i * 4 + 2], queries[i * 4 + 3]).length;
+    return {ms: performance.now() - t0, found};
+}
+function benchV5static() {
+    let found = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < QN; i++) found += t5static.search(queries[i * 4], queries[i * 4 + 1], queries[i * 4 + 2], queries[i * 4 + 3]).length;
     return {ms: performance.now() - t0, found};
 }
 function benchV4() {
@@ -55,7 +66,9 @@ console.log(`N = ${N.toLocaleString()}, ${QN} queries, bufferSize = ${B}`);
 console.log(`v5 blocks: ${t5._blocks.filter(Boolean).length}, buffer ${t5._n}`);
 
 const v5 = bestOf(benchV5);
+const v5s = bestOf(benchV5static);
 const v4 = bestOf(benchV4);
-console.log(`v5 search: ${v5.best.toFixed(1)} ms (${(QN / v5.best).toFixed(1)} k queries/s), ${v5.found} hits`);
-console.log(`v4 search: ${v4.best.toFixed(1)} ms (${(QN / v4.best).toFixed(1)} k queries/s), ${v4.found} hits`);
-console.log(`v5 is ${(v5.best / v4.best).toFixed(2)}× v4${v5.found === v4.found ? '' : '  ⚠ HIT COUNT MISMATCH'}`);
+console.log(`v5 search:        ${v5.best.toFixed(1)} ms (${(QN / v5.best).toFixed(1)} k queries/s), ${v5.found} hits`);
+console.log(`v5 single-block:  ${v5s.best.toFixed(1)} ms (${(QN / v5s.best).toFixed(1)} k queries/s), ${v5s.found} hits`);
+console.log(`v4 search:        ${v4.best.toFixed(1)} ms (${(QN / v4.best).toFixed(1)} k queries/s), ${v4.found} hits`);
+console.log(`v5 is ${(v5.best / v4.best).toFixed(2)}× v4, and ${(v5.best / v5s.best).toFixed(2)}× the single-block ceiling${v5.found === v4.found && v5.found === v5s.found ? '' : '  ⚠ HIT COUNT MISMATCH'}`);
