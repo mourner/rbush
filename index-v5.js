@@ -16,10 +16,12 @@
 // different blocks are directly comparable and the 2-way merge stays a linear key scan.
 // (Boxes themselves are kept full-precision for accurate search.)
 //
-// Per-block storage layout (held until serialization): each block owns separate typed
-// arrays — `boxes` (leaf MBRs then node MBRs, bottom-up), `indices` (leaf → global id,
-// node → child box offset), `keys` (leaf Hilbert keys, for merging), plus `numItems`,
-// `nodeSize`, `levelBounds`. Separate arrays make build/merge/replacement trivial.
+// Per-block storage layout: each block owns separate typed arrays — `boxes` (leaf MBRs then,
+// after pack(), node MBRs bottom-up), `indices` (leaf → global id, node → child box offset),
+// `keys` (leaf Hilbert keys, for merging), plus `numItems`, `nodeSize`, and `levelBounds`
+// (built lazily by pack() on first search, like the node MBRs). Separate arrays make
+// build/merge/replacement trivial, and their sizes are a clean B·2^k set, so each block a merge
+// relieves is recycled whole through a per-size pool instead of reallocated from scratch.
 
 const HILBERT_MAX = (1 << 16) - 1;
 
@@ -152,6 +154,39 @@ class RBlock {
     }
 }
 
+/**
+ * Whole blocks are recycled through a free list keyed by item count rather than reallocated. A
+ * merge relieves its two inputs (the carried-away level) and produces a larger output; since block
+ * sizes are a small fixed B·2^k set and a block's three arrays are all sized from `numItems`, a
+ * relieved level-i block is exactly what the next level-i block needs — so it goes back whole and
+ * the next same-size block reuses its arrays in place. They're handed back dirty (`packed`/
+ * `levelBounds` reset, contents not) — no zero-fill: the leaf portion is fully overwritten by the
+ * merge/freeze copy, and the node tail by pack() before any search reads it, so stale contents are
+ * never observed. The cascade frees blocks in same-size pairs, so a level needs up to two free at
+ * once — hence a free *list* per size, not a single dormant slot.
+ * @param {Map<number, RBlock[]>} pool keyed by numItems
+ * @param {number} numItems
+ * @param {number} nodeSize
+ */
+function takeBlock(pool, numItems, nodeSize) {
+    const free = pool.get(numItems);
+    if (free !== undefined && free.length > 0) {
+        const block = free.pop();
+        block.packed = false;     // node MBRs will be rebuilt by pack(); leaf portion gets overwritten now
+        block.levelBounds = null;
+        return block;
+    }
+    const numNodes = nodeCount(numItems, nodeSize);
+    return new RBlock(numItems, nodeSize, new Uint32Array(numItems), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
+}
+
+/** Return a relieved block to its free list for reuse by the next same-size block. @param {Map<number, RBlock[]>} pool @param {RBlock} block */
+function putBlock(pool, block) {
+    const free = pool.get(block.numItems);
+    if (free === undefined) pool.set(block.numItems, [block]);
+    else free.push(block);
+}
+
 export default class RBush {
     /**
      * @param {[number, number, number, number]} [domain] Coordinate bounds [minX, minY, maxX, maxY] for the Hilbert grid.
@@ -173,6 +208,7 @@ export default class RBush {
         this._ids = new Uint32Array(bufferSize);         // their ids, parallel to _boxes
         this._n = 0;                                     // items currently in the buffer
         this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
+        this._pool = new Map();                          // numItems → free list of relieved blocks for reuse
     }
 
     /**
@@ -197,25 +233,26 @@ export default class RBush {
     /** Freeze the full buffer into a Hilbert-sorted level-0 block and carry it up through the levels. */
     _flush() {
         const boxes = this._boxes;
-        const keys = new Uint32Array(this._n);
-        for (let i = 0; i < this._n; i++) {
-            const p = i * 4;
-            const x = (this._scaleX * ((boxes[p] + boxes[p + 2]) / 2 - this._minX)) | 0;
-            const y = (this._scaleY * ((boxes[p + 1] + boxes[p + 3]) / 2 - this._minY)) | 0;
-            keys[i] = hilbert(clamp(x), clamp(y));
-        }
+        const pool = this._pool;
         const n = this._n;
-        sort(keys, this._boxes, this._ids, 0, n - 1); // sort by Hilbert key, boxes + ids follow
 
-        // The carried value's arrays are sized for the full packed tree up front, but only the
-        // leaf portion is filled; node MBRs are computed lazily on first search. Intermediate
-        // carry blocks are immediately re-merged, so packing their MBRs would be wasted work.
-        const numNodes = nodeCount(n, this.nodeSize);
-        const blockBoxes = new Float64Array(numNodes * 4);
-        const blockIds = new Uint32Array(numNodes);
-        blockBoxes.set(this._boxes.subarray(0, n * 4));
-        blockIds.set(this._ids.subarray(0, n));
-        let run = new RBlock(n, this.nodeSize, keys, blockBoxes, blockIds);
+        // The level-0 run's arrays are sized for the full packed tree up front (recycled whole from
+        // the pool), but only the leaf portion is filled; node MBRs are computed lazily on first
+        // search. Intermediate carry blocks are immediately re-merged, so packing them is wasted work.
+        let run = takeBlock(pool, n, this.nodeSize);
+        const keys = run.keys;
+        for (let i = 0; i < n; i++) {
+            const p = i * 4;
+            // clamp the scaled float *before* truncating: a far-out-of-domain coordinate
+            // overflows int32 if `| 0` runs first, wrapping to the wrong grid cell instead of
+            // pinning to the edge (quality-only, but arbitrarily bad ordering — see clamp).
+            const x = clamp(this._scaleX * ((boxes[p] + boxes[p + 2]) / 2 - this._minX)) | 0;
+            const y = clamp(this._scaleY * ((boxes[p + 1] + boxes[p + 3]) / 2 - this._minY)) | 0;
+            keys[i] = hilbert(x, y);
+        }
+        sort(keys, this._boxes, this._ids, 0, n - 1); // sort by Hilbert key, boxes + ids follow
+        run.boxes.set(this._boxes.subarray(0, n * 4));
+        run.indices.set(this._ids.subarray(0, n));
         this._n = 0;
 
         for (let level = 0; ; level++) {
@@ -224,7 +261,7 @@ export default class RBush {
                 this._blocks[level] = run; // empty slot — settle here as an unpacked leaf run
                 break;
             }
-            run = merge(existing, run); // collision — merge leaves and carry to the next level
+            run = merge(existing, run, pool); // collision — merge leaves and carry to the next level
             this._blocks[level] = undefined;
         }
     }
@@ -282,37 +319,42 @@ function upperBound(value, arr) {
  * RBlock.pack() rebuilds the tree once the run finally settles and is first searched.
  * @param {RBlock} a
  * @param {RBlock} b
+ * @param {Map<number, RBlock[]>} pool
  */
-function merge(a, b) {
-    // Hoist the six typed-array views into locals: the merge loop is the dominant cost,
-    // and reading `a.keys`/`b.boxes`/… off the block object every iteration is a property
-    // load V8 won't hoist across the loop. Pulling them out (and inlining the per-item
-    // copy below) is ~22% faster on the merge itself.
-    const aKeys = a.keys, aBoxes = a.boxes, aIds = a.indices;
-    const bKeys = b.keys, bBoxes = b.boxes, bIds = b.indices;
+function merge(a, b, pool) {
     const al = a.numItems, bl = b.numItems, n = al + bl;
-    // arrays sized for the full packed tree; the merge fills only the leaf portion [0, n)
-    const numNodes = nodeCount(n, a.nodeSize);
-    const keys = new Uint32Array(n);
-    const boxes = new Float64Array(numNodes * 4);
-    const ids = new Uint32Array(numNodes);
+    // output sized for the full packed tree (recycled whole from the pool); fill only the leaf portion [0, n)
+    const out = takeBlock(pool, n, a.nodeSize);
+    const keys = out.keys, boxes = out.boxes, ids = out.indices;
 
-    // disjoint key ranges (clustered/temporal streams) — pure concatenation, no merge loop
-    if (aKeys[al - 1] <= bKeys[0]) return concat(a, b, keys, boxes, ids);
-    if (bKeys[bl - 1] <= aKeys[0]) return concat(b, a, keys, boxes, ids);
-
-    let i = 0, j = 0, k = 0;
-    while (i < al && j < bl) {
-        let s, sb;
-        if (aKeys[i] <= bKeys[j]) { s = i++; keys[k] = aKeys[s]; ids[k] = aIds[s]; sb = aBoxes; } else { s = j++; keys[k] = bKeys[s]; ids[k] = bIds[s]; sb = bBoxes; }
-        const sp = s * 4, dp = k * 4;
-        boxes[dp] = sb[sp]; boxes[dp + 1] = sb[sp + 1]; boxes[dp + 2] = sb[sp + 2]; boxes[dp + 3] = sb[sp + 3];
-        k++;
+    if (a.keys[al - 1] <= b.keys[0]) {       // disjoint key ranges (clustered/temporal streams)
+        concat(a, b, keys, boxes, ids);      //   — pure concatenation, no merge loop
+    } else if (b.keys[bl - 1] <= a.keys[0]) {
+        concat(b, a, keys, boxes, ids);
+    } else {
+        // Hoist the six typed-array views into locals: the merge loop is the dominant cost,
+        // and reading `a.keys`/`b.boxes`/… off the block object every iteration is a property
+        // load V8 won't hoist across the loop. Pulling them out (and inlining the per-item
+        // copy below) is ~22% faster on the merge itself.
+        const aKeys = a.keys, aBoxes = a.boxes, aIds = a.indices;
+        const bKeys = b.keys, bBoxes = b.boxes, bIds = b.indices;
+        let i = 0, j = 0, k = 0;
+        while (i < al && j < bl) {
+            let s, sb;
+            if (aKeys[i] <= bKeys[j]) { s = i++; keys[k] = aKeys[s]; ids[k] = aIds[s]; sb = aBoxes; } else { s = j++; keys[k] = bKeys[s]; ids[k] = bIds[s]; sb = bBoxes; }
+            const sp = s * 4, dp = k * 4;
+            boxes[dp] = sb[sp]; boxes[dp + 1] = sb[sp + 1]; boxes[dp + 2] = sb[sp + 2]; boxes[dp + 3] = sb[sp + 3];
+            k++;
+        }
+        // bulk-copy whichever input's leaf tail remains (memcpy, much faster than per-item)
+        if (i < al) appendTail(aKeys, aBoxes, aIds, i, al, keys, boxes, ids, k);
+        else if (j < bl) appendTail(bKeys, bBoxes, bIds, j, bl, keys, boxes, ids, k);
     }
-    // bulk-copy whichever input's leaf tail remains (memcpy, much faster than per-item)
-    if (i < al) appendTail(aKeys, aBoxes, aIds, i, al, keys, boxes, ids, k);
-    else if (j < bl) appendTail(bKeys, bBoxes, bIds, j, bl, keys, boxes, ids, k);
-    return new RBlock(n, a.nodeSize, keys, boxes, ids);
+
+    // both inputs are now fully consumed — recycle them for the next same-size blocks
+    putBlock(pool, a);
+    putBlock(pool, b);
+    return out;
 }
 
 /** Append the leaf run src[from..numItems) into the output starting at slot k via bulk set(). */
@@ -322,7 +364,7 @@ function appendTail(srcKeys, srcBoxes, srcIds, from, numItems, keys, boxes, ids,
     boxes.set(srcBoxes.subarray(from * 4, numItems * 4), k * 4);
 }
 
-/** Concatenate two disjoint leaf runs (all of `lo` then all of `hi`) into a new run. */
+/** Concatenate two disjoint leaf runs (all of `lo` then all of `hi`) into the output arrays. */
 function concat(lo, hi, keys, boxes, ids) {
     const ll = lo.numItems, hl = hi.numItems;
     // keys is exactly numItems long, so no subarray needed; boxes/indices may carry
@@ -330,7 +372,6 @@ function concat(lo, hi, keys, boxes, ids) {
     keys.set(lo.keys); keys.set(hi.keys, ll);
     ids.set(lo.indices.subarray(0, ll)); ids.set(hi.indices.subarray(0, hl), ll);
     boxes.set(lo.boxes.subarray(0, ll * 4)); boxes.set(hi.boxes.subarray(0, hl * 4), ll * 4);
-    return new RBlock(ll + hl, lo.nodeSize, keys, boxes, ids);
 }
 
 const SORT_STACK = new Uint32Array(64); // safe for quicksort over Uint32Array looping into the smaller side
@@ -388,7 +429,7 @@ function swap(keys, boxes, ids, i, j) {
     }
 }
 
-/** Clamp a quantized coordinate into the Hilbert grid. */
+/** Clamp a scaled coordinate to the Hilbert grid range [0, HILBERT_MAX] before truncation. */
 function clamp(v) {
     return v < 0 ? 0 : v > HILBERT_MAX ? HILBERT_MAX : v;
 }
