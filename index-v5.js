@@ -24,21 +24,39 @@
 const HILBERT_MAX = (1 << 16) - 1;
 
 /**
+ * Total node count of a packed tree over `numItems` leaves (leaves + bottom-up parent nodes,
+ * Flatbush layout). No closed form — the per-level ceil doesn't distribute — but it's a handful
+ * of iterations. Used to allocate a block's `boxes`/`indices` at their final packed size up
+ * front; the per-level bounds needed for search are built lazily in pack().
+ * @param {number} numItems
+ * @param {number} nodeSize
+ */
+function nodeCount(numItems, nodeSize) {
+    let n = numItems, count = n;
+    do {
+        n = Math.ceil(n / nodeSize);
+        count += n;
+    } while (n !== 1);
+    return count;
+}
+
+/**
  * One frozen block: a Hilbert-sorted run of leaf items that can be packed into a standalone
  * Flatbush-style index and searched on its own. Created as a bare leaf run (`levelBounds`
  * null) by _flush / merge / concat; `pack()` fills in the node MBRs on first search.
  *
- * `boxes` holds leaf MBRs first, then (once packed) bottom-up node MBRs. `indices` is
- * dual-purpose in the Flatbush convention: leaf rows hold the global item id, node rows hold
- * the box offset of their first child. `keys` are the leaf Hilbert codes, read only by merge.
+ * `boxes` is sized for the full packed tree from the start: leaf MBRs occupy the front, and
+ * pack() fills the bottom-up node MBRs into the tail in place. `indices` is dual-purpose in
+ * the Flatbush convention: leaf rows hold the global item id, node rows hold the box offset of
+ * their first child. `keys` are the leaf Hilbert codes (leaf-sized), read only by merge.
  */
 class RBlock {
     /**
      * @param {number} numItems
      * @param {number} nodeSize Packed R-tree node size.
      * @param {Uint32Array} keys Leaf Hilbert codes (length numItems).
-     * @param {Float64Array} boxes Leaf MBRs (4 each); grown to hold node MBRs by pack().
-     * @param {Uint32Array} indices Leaf → global id; grown to also hold node → child offset.
+     * @param {Float64Array} boxes Full packed-tree size; only the leaf portion is filled until pack().
+     * @param {Uint32Array} indices Same: leaf → global id, then node → child offset after pack().
      */
     constructor(numItems, nodeSize, keys, boxes, indices) {
         this.numItems = numItems;
@@ -46,33 +64,28 @@ class RBlock {
         this.keys = keys;
         this.boxes = boxes;
         this.indices = indices;
-        this.levelBounds = null; // node-MBR level offsets; null until pack() runs
+        this.levelBounds = null; // per-level box-offset bounds; built by pack() on first search
+        this.packed = false;     // node MBRs not yet computed; pack() sets this on first search
     }
 
     /**
-     * Pack this leaf run into a full Flatbush index by generating its node MBRs bottom-up.
-     * Deferred until first search: a block merged away before any query never needs its tree
-     * (merge reads only leaves), so under insert-heavy load almost all packing is skipped.
-     * Grows `boxes`/`indices` in place (the leaf portion stays valid for future merges) and
-     * sets `levelBounds`; idempotent via the caller's `levelBounds === null` guard.
+     * Fill in this block's node MBRs bottom-up, in place (arrays are already full size), and
+     * build the per-level bounds search needs. Deferred until first search: a block merged away
+     * before any query never needs its tree (merge reads only leaves), so under insert-heavy
+     * load almost all packing is skipped. Idempotent via the caller's `packed` guard.
      */
     pack() {
         const numItems = this.numItems, nodeSize = this.nodeSize;
+        const boxes = this.boxes, indices = this.indices;
 
-        // count nodes per level (Flatbush layout) and the box-offset bound of each level
-        let n = numItems, numNodes = n;
+        // per-level box-offset bounds (Flatbush layout)
+        let n = numItems, total = n;
         const levelBounds = [n * 4];
         do {
             n = Math.ceil(n / nodeSize);
-            numNodes += n;
-            levelBounds.push(numNodes * 4);
+            total += n;
+            levelBounds.push(total * 4);
         } while (n !== 1);
-
-        // grow the leaf arrays to hold node MBRs (the leaf portion stays valid for future merges)
-        const boxes = new Float64Array(numNodes * 4);
-        const indices = new Uint32Array(numNodes);
-        boxes.set(this.boxes.subarray(0, numItems * 4));
-        indices.set(this.indices.subarray(0, numItems));
 
         // generate parent nodes level by level, bottom-up
         let pos = 0;            // read cursor over the level below
@@ -93,9 +106,8 @@ class RBlock {
             }
         }
 
-        this.boxes = boxes;
-        this.indices = indices;
         this.levelBounds = levelBounds;
+        this.packed = true;
     }
 
     /**
@@ -195,10 +207,15 @@ export default class RBush {
         const n = this._n;
         sort(keys, this._boxes, this._ids, 0, n - 1); // sort by Hilbert key, boxes + ids follow
 
-        // The carried value is a cheap leaf-only run (keys + leaf boxes + ids), packed into a
-        // full tree only once it settles. Intermediate carry blocks are immediately re-merged,
-        // so packing their node MBRs would be wasted work.
-        let run = new RBlock(n, this.nodeSize, keys, this._boxes.slice(0, n * 4), this._ids.slice(0, n));
+        // The carried value's arrays are sized for the full packed tree up front, but only the
+        // leaf portion is filled; node MBRs are computed lazily on first search. Intermediate
+        // carry blocks are immediately re-merged, so packing their MBRs would be wasted work.
+        const numNodes = nodeCount(n, this.nodeSize);
+        const blockBoxes = new Float64Array(numNodes * 4);
+        const blockIds = new Uint32Array(numNodes);
+        blockBoxes.set(this._boxes.subarray(0, n * 4));
+        blockIds.set(this._ids.subarray(0, n));
+        let run = new RBlock(n, this.nodeSize, keys, blockBoxes, blockIds);
         this._n = 0;
 
         for (let level = 0; ; level++) {
@@ -227,7 +244,7 @@ export default class RBush {
 
         for (const block of this._blocks) {
             if (!block) continue;
-            if (block.levelBounds === null) block.pack(); // lazily build node MBRs on first search
+            if (!block.packed) block.pack(); // lazily build node MBRs on first search
             block.search(minX, minY, maxX, maxY, filterFn, results);
         }
 
@@ -274,9 +291,11 @@ function merge(a, b) {
     const aKeys = a.keys, aBoxes = a.boxes, aIds = a.indices;
     const bKeys = b.keys, bBoxes = b.boxes, bIds = b.indices;
     const al = a.numItems, bl = b.numItems, n = al + bl;
+    // arrays sized for the full packed tree; the merge fills only the leaf portion [0, n)
+    const numNodes = nodeCount(n, a.nodeSize);
     const keys = new Uint32Array(n);
-    const boxes = new Float64Array(n * 4);
-    const ids = new Uint32Array(n);
+    const boxes = new Float64Array(numNodes * 4);
+    const ids = new Uint32Array(numNodes);
 
     // disjoint key ranges (clustered/temporal streams) — pure concatenation, no merge loop
     if (aKeys[al - 1] <= bKeys[0]) return concat(a, b, keys, boxes, ids);
@@ -307,7 +326,7 @@ function appendTail(srcKeys, srcBoxes, srcIds, from, numItems, keys, boxes, ids,
 function concat(lo, hi, keys, boxes, ids) {
     const ll = lo.numItems, hl = hi.numItems;
     // keys is exactly numItems long, so no subarray needed; boxes/indices may carry
-    // appended node MBRs from a prior pack(), so those are bounded to the leaf portion.
+    // node MBRs from a prior pack(), so those are bounded to the leaf portion.
     keys.set(lo.keys); keys.set(hi.keys, ll);
     ids.set(lo.indices.subarray(0, ll)); ids.set(hi.indices.subarray(0, hl), ll);
     boxes.set(lo.boxes.subarray(0, ll * 4)); boxes.set(hi.boxes.subarray(0, hl * 4), ll * 4);
