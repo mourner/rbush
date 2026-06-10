@@ -20,27 +20,11 @@
 // after pack(), node MBRs bottom-up), `indices` (leaf → global id, node → child box offset),
 // `keys` (leaf Hilbert keys, for merging), plus `numItems` and `nodeSize`. Each tree level is
 // padded to a full nodeSize multiple (by pack(), on first search) so every node is the same width
-// and search needs no level-bound check. Separate arrays make build/merge/replacement trivial, and their
-// sizes are a clean B·2^k set, so each block a merge relieves is recycled whole through a
-// per-size pool instead of reallocated from scratch.
+// and search needs no level-bound check. Separate arrays make build/merge/replacement trivial. Arrays
+// are allocated to a `capacity` size class (B·2^k ≥ numItems), so every block is recycled whole through
+// a pool of free lists indexed by level (a clean slab allocator) instead of reallocated from scratch.
 
 const HILBERT_MAX = (1 << 16) - 1;
-
-/**
- * Total node count of a packed tree over `numItems` leaves (leaves + bottom-up parent nodes,
- * Flatbush layout), every non-root level padded to a full nodeSize multiple (see pack()). Used to
- * size a block's `boxes`/`indices` at final packed size up front.
- * @param {number} numItems
- * @param {number} nodeSize
- */
-function nodeCount(numItems, nodeSize) {
-    let e = numItems, count = 1;
-    while (e !== 1) {
-        e = Math.ceil(e / nodeSize);
-        count += e * nodeSize;
-    }
-    return count;
-}
 
 /**
  * Fill a box range with sentinel boxes (+∞ min / −∞ max): never match a query, no-ops in parent MBRs.
@@ -55,30 +39,28 @@ function padSentinels(boxes, start, end) {
 }
 
 /**
- * One frozen block: a Hilbert-sorted run of leaf items that can be packed into a standalone
- * Flatbush-style index and searched on its own. Created as a bare leaf run (`packed`
- * false) by _flush / merge / concat; `pack()` fills in the node MBRs on first search.
- *
- * `boxes` is sized for the full packed tree from the start: leaf MBRs occupy the front, and
- * pack() fills the bottom-up node MBRs into the tail in place. `indices` is dual-purpose in
- * the Flatbush convention: leaf rows hold the global item id, node rows hold the box offset of
- * their first child. `keys` are the leaf Hilbert codes (leaf-sized), read only by merge.
+ * One frozen block: a Hilbert-sorted leaf run that packs into a standalone Flatbush-style index and
+ * searches on its own. Born as a bare leaf run (`packed` false) by _flush / merge / concat; `pack()`
+ * fills the node MBRs on first search. Arrays are sized to the capacity class B·2ᵏ ≥ numItems (not the
+ * live numItems), so a recycled block serves any count up to capacity — the leaf portion is [0, numItems).
  */
 class RBlock {
     /**
-     * @param {number} numItems
+     * @param {number} level Cascade slot and pool index in one (k in B·2ᵏ); capacity === bufferSize << level.
      * @param {number} nodeSize Packed R-tree node size.
-     * @param {Int32Array} keys Leaf Hilbert codes (length numItems).
-     * @param {Float64Array} boxes Full packed-tree size; only the leaf portion is filled until pack().
-     * @param {Uint32Array} indices Same: leaf → global id, then node → child offset after pack().
+     * @param {Int32Array} keys Leaf Hilbert codes, read only by merge.
+     * @param {Float64Array} boxes Full packed-tree size: leaf MBRs at the front, pack() fills node MBRs into the tail.
+     * @param {Uint32Array} indices Flatbush dual-purpose: leaf → global id, node → first child's box offset (after pack()).
      */
-    constructor(numItems, nodeSize, keys, boxes, indices) {
-        this.numItems = numItems;
+    constructor(level, nodeSize, keys, boxes, indices) {
+        this.level = level;      // cascade slot + pool size-class index (capacity === bufferSize << level)
+        this.numItems = 0;       // live leaf count, ≤ capacity; set by takeBlock
         this.nodeSize = nodeSize;
         this.keys = keys;
         this.boxes = boxes;
         this.indices = indices;
         this.packed = false;     // node MBRs not yet computed; pack() sets this on first search
+        this.rootPos = 0;        // box offset of the root node; set by pack()
     }
 
     /**
@@ -112,7 +94,7 @@ class RBlock {
                 boxes[wp++] = minX; boxes[wp++] = minY; boxes[wp++] = maxX; boxes[wp++] = maxY;
             }
             const numParents = count / nodeSize;
-            if (numParents === 1) break; // wrote the root
+            if (numParents === 1) { this.rootPos = wp - 4; break; } // just wrote the root box
 
             count = Math.ceil(numParents / nodeSize) * nodeSize; // pad this new level and move up to it
             padSentinels(boxes, wp, parentStart + count * 4);
@@ -139,7 +121,7 @@ class RBlock {
         const nodeSize4 = this.nodeSize * 4, leafEnd = this.numItems * 4;
 
         // test the lone (unpadded) root box, then descend from its children
-        const r = boxes.length - 4;
+        const r = this.rootPos;
         if (maxX < boxes[r] || maxY < boxes[r + 1] || minX > boxes[r + 2] || minY > boxes[r + 3]) return;
         let nodeIndex = indices[r >> 2];
         const queue = [];
@@ -171,35 +153,45 @@ class RBlock {
 }
 
 /**
- * Take a block of `numItems` from the pool, or allocate one. Blocks are recycled whole rather than
- * reallocated: sizes are a fixed B·2^k set and a block's three arrays are all sized from `numItems`,
- * so a relieved level-i block is exactly what the next level-i block needs. Recycled blocks come back
- * dirty — no zero-fill, since the leaf portion is overwritten on freeze/merge and the node tail by
- * pack() before any search reads it. The cascade frees same-size pairs, so the pool keeps a list per
- * size, not a single slot.
- * @param {Map<number, RBlock[]>} pool keyed by numItems
+ * Take a block holding `numItems` from the pool, or allocate one. Arrays are sized to the capacity class
+ * B·2ᵏ ≥ numItems, not numItems itself: insert-path blocks are exactly B·2ᵏ so the two coincide, while
+ * load/compaction produce odd sizes — rounding up to the fixed class set makes the pool a clean slab
+ * allocator, every freed block reusable by construction. The pool is free lists indexed by level (the
+ * cascade frees same-size pairs, so one slot per level wouldn't suffice). Recycled blocks come back dirty:
+ * no zero-fill, since freeze/merge overwrites the leaf portion and pack() the node tail before any search.
+ * @param {RBlock[][]} pool free lists indexed by level
  * @param {number} numItems
  * @param {number} nodeSize
+ * @param {number} bufferSize Base size B; the smallest capacity class (level 0).
  */
-function takeBlock(pool, numItems, nodeSize) {
-    const free = pool.get(numItems);
+function takeBlock(pool, numItems, nodeSize, bufferSize) {
+    let capacity = bufferSize, level = 0;
+    while (capacity < numItems) { capacity <<= 1; level++; } // smallest class B·2ᵏ ≥ numItems
+
+    const free = pool[level];
+    let block;
     if (free !== undefined && free.length > 0) {
-        const block = free.pop();
+        block = free.pop();
         block.packed = false;     // node MBRs will be rebuilt by pack(); leaf portion gets overwritten now
-        return block;
+    } else {
+        // total node count of a padded packed tree over `capacity` leaves (Flatbush layout): leaves
+        // plus bottom-up parents, every non-root level padded to a full nodeSize multiple (see pack()).
+        let e = capacity, numNodes = 1;
+        while (e !== 1) { e = Math.ceil(e / nodeSize); numNodes += e * nodeSize; }
+        block = new RBlock(level, nodeSize, new Int32Array(capacity), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
     }
-    const numNodes = nodeCount(numItems, nodeSize);
-    return new RBlock(numItems, nodeSize, new Int32Array(numItems), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
+    block.numItems = numItems;
+    return block;
 }
 
 /**
- * Return a relieved block to its free list for reuse by the next same-size block.
- * @param {Map<number, RBlock[]>} pool
+ * Return a relieved block to its free list for reuse by the next block of the same level (capacity class).
+ * @param {RBlock[][]} pool
  * @param {RBlock} block
  */
 function putBlock(pool, block) {
-    const free = pool.get(block.numItems);
-    if (free === undefined) pool.set(block.numItems, [block]);
+    const free = pool[block.level];
+    if (free === undefined) pool[block.level] = [block];
     else free.push(block);
 }
 
@@ -220,12 +212,12 @@ export default class RBush {
         this._scaleX = HILBERT_MAX / ((maxX - minX) || 1); // center → [0, HILBERT_MAX] grid
         this._scaleY = HILBERT_MAX / ((maxY - minY) || 1);
 
-        this._pool = new Map();                          // numItems → free list of relieved blocks for reuse
+        this._pool = [];                                 // level → free list of relieved blocks for reuse
         this._n = 0;                                     // items currently in the buffer
         this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
         // The mutable buffer is itself a pool block holding the newest ≤ bufferSize items: `add` fills
         // its leaf portion in place, search scans it linearly, and freezing it is zero-copy (see _flush).
-        this._buffer = takeBlock(this._pool, bufferSize, nodeSize);
+        this._buffer = takeBlock(this._pool, bufferSize, nodeSize, bufferSize);
     }
 
     /**
@@ -269,7 +261,7 @@ export default class RBush {
         }
         sort(keys, boxes, run.indices, 0, n - 1); // sort by Hilbert key, boxes + ids follow
         this._n = 0;
-        this._buffer = takeBlock(pool, this.bufferSize, this.nodeSize); // borrow a fresh buffer block
+        this._buffer = takeBlock(pool, this.bufferSize, this.nodeSize, this.bufferSize); // borrow a fresh buffer block
 
         for (let level = 0; ; level++) {
             const existing = this._blocks[level];
@@ -277,7 +269,7 @@ export default class RBush {
                 this._blocks[level] = run; // empty slot — settle here as an unpacked leaf run
                 break;
             }
-            run = merge(existing, run, pool); // collision — merge leaves and carry to the next level
+            run = merge(existing, run, pool, this.bufferSize); // collision — merge leaves and carry to the next level
             this._blocks[level] = undefined;
         }
     }
@@ -320,12 +312,13 @@ export default class RBush {
  * RBlock.pack() rebuilds the tree once the run finally settles and is first searched.
  * @param {RBlock} a
  * @param {RBlock} b
- * @param {Map<number, RBlock[]>} pool
+ * @param {RBlock[][]} pool
+ * @param {number} bufferSize Base size B, for the output's capacity class.
  */
-function merge(a, b, pool) {
+function merge(a, b, pool, bufferSize) {
     const al = a.numItems, bl = b.numItems, n = al + bl;
     // output sized for the full packed tree (recycled whole from the pool); fill only the leaf portion [0, n)
-    const out = takeBlock(pool, n, a.nodeSize);
+    const out = takeBlock(pool, n, a.nodeSize, bufferSize);
     const keys = out.keys, boxes = out.boxes, ids = out.indices;
 
     if (a.keys[al - 1] <= b.keys[0]) {       // disjoint key ranges (clustered/temporal streams)
@@ -368,9 +361,9 @@ function appendTail(srcKeys, srcBoxes, srcIds, from, numItems, keys, boxes, ids,
 /** Concatenate two disjoint leaf runs (all of `lo` then all of `hi`) into the output arrays. */
 function concat(lo, hi, keys, boxes, ids) {
     const ll = lo.numItems, hl = hi.numItems;
-    // keys is exactly numItems long, so no subarray needed; boxes/indices may carry
-    // node MBRs from a prior pack(), so those are bounded to the leaf portion.
-    keys.set(lo.keys); keys.set(hi.keys, ll);
+    // every array is allocated to capacity ≥ numItems (and boxes/indices may also carry node MBRs from a
+    // prior pack()), so bound each copy to the live leaf portion [0, numItems).
+    keys.set(lo.keys.subarray(0, ll)); keys.set(hi.keys.subarray(0, hl), ll);
     ids.set(lo.indices.subarray(0, ll)); ids.set(hi.indices.subarray(0, hl), ll);
     boxes.set(lo.boxes.subarray(0, ll * 4)); boxes.set(hi.boxes.subarray(0, hl * 4), ll * 4);
 }
