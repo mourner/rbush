@@ -220,11 +220,12 @@ export default class RBush {
         this._scaleX = HILBERT_MAX / ((maxX - minX) || 1); // center → [0, HILBERT_MAX] grid
         this._scaleY = HILBERT_MAX / ((maxY - minY) || 1);
 
-        this._boxes = new Float64Array(bufferSize * 4);  // newest boxes, unsorted
-        this._ids = new Uint32Array(bufferSize);         // their ids, parallel to _boxes
+        this._pool = new Map();                          // numItems → free list of relieved blocks for reuse
         this._n = 0;                                     // items currently in the buffer
         this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
-        this._pool = new Map();                          // numItems → free list of relieved blocks for reuse
+        // The mutable buffer is itself a pool block holding the newest ≤ bufferSize items: `add` fills
+        // its leaf portion in place, search scans it linearly, and freezing it is zero-copy (see _flush).
+        this._buffer = takeBlock(this._pool, bufferSize, nodeSize);
     }
 
     /**
@@ -236,27 +237,27 @@ export default class RBush {
      */
     add(minX, minY, maxX = minX, maxY = minY) {
         const id = this.length++;
+        const boxes = this._buffer.boxes;
         const p = this._n * 4;
-        this._boxes[p] = minX;
-        this._boxes[p + 1] = minY;
-        this._boxes[p + 2] = maxX;
-        this._boxes[p + 3] = maxY;
-        this._ids[this._n] = id;
+        boxes[p] = minX;
+        boxes[p + 1] = minY;
+        boxes[p + 2] = maxX;
+        boxes[p + 3] = maxY;
+        this._buffer.indices[this._n] = id;
         if (++this._n === this.bufferSize) this._flush();
         return id;
     }
 
     /** Freeze the full buffer into a Hilbert-sorted level-0 block and carry it up through the levels. */
     _flush() {
-        const boxes = this._boxes;
         const pool = this._pool;
         const n = this._n;
 
-        // The level-0 run's arrays are sized for the full packed tree up front (recycled whole from
-        // the pool), but only the leaf portion is filled; node MBRs are computed lazily on first
-        // search. Intermediate carry blocks are immediately re-merged, so packing them is wasted work.
-        let run = takeBlock(pool, n, this.nodeSize);
-        const keys = run.keys;
+        // The buffer is already a level-0 block, so freezing is an in-place sort: compute Hilbert keys,
+        // sort keys/boxes/indices together, hand the block to the cascade, borrow a fresh one. Node MBRs
+        // are left for lazy packing on first search — carry blocks get re-merged before any query.
+        let run = this._buffer;
+        const boxes = run.boxes, keys = run.keys;
         for (let i = 0; i < n; i++) {
             const p = i * 4;
             // clamp the scaled float *before* truncating: a far-out-of-domain coordinate
@@ -266,10 +267,9 @@ export default class RBush {
             const y = clamp(this._scaleY * ((boxes[p + 1] + boxes[p + 3]) / 2 - this._minY)) | 0;
             keys[i] = hilbert(x, y);
         }
-        sort(keys, this._boxes, this._ids, 0, n - 1); // sort by Hilbert key, boxes + ids follow
-        run.boxes.set(this._boxes.subarray(0, n * 4));
-        run.indices.set(this._ids.subarray(0, n));
+        sort(keys, boxes, run.indices, 0, n - 1); // sort by Hilbert key, boxes + ids follow
         this._n = 0;
+        this._buffer = takeBlock(pool, this.bufferSize, this.nodeSize); // borrow a fresh buffer block
 
         for (let level = 0; ; level++) {
             const existing = this._blocks[level];
@@ -301,8 +301,8 @@ export default class RBush {
             block.search(minX, minY, maxX, maxY, filterFn, results);
         }
 
-        // linear scan of the still-mutable buffer
-        const boxes = this._boxes, ids = this._ids;
+        // linear scan of the still-mutable buffer block (leaf portion, up to _n)
+        const boxes = this._buffer.boxes, ids = this._buffer.indices;
         for (let i = 0, p = 0; i < this._n; i++, p += 4) {
             const x0 = boxes[p], y0 = boxes[p + 1], x1 = boxes[p + 2], y1 = boxes[p + 3];
             if (maxX < x0 || maxY < y0 || minX > x1 || minY > y1) continue;
