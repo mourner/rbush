@@ -1,6 +1,6 @@
 import Benchmark from 'benchmark';
 import RBush from '../index.js';
-import {generate} from './gendata';
+import {generate} from './gendata.js';
 
 const N = 100,
     maxFill = 16;

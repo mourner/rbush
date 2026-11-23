@@ -21,8 +21,8 @@ function run(N, B) {
     }
 
     let fails = 0;
-    for (let t = 0; t < 200; t++) {
-        const q = randBox();
+    for (let t = 0; t < 201; t++) {
+        const q = t === 200 ? [-Infinity, -Infinity, Infinity, Infinity] : randBox();
         const got = tree.search(q[0], q[1], q[2], q[3]).sort((a, b) => a - b);
         const want = [];
         for (let i = 0; i < N; i++) if (intersects(items[i], q)) want.push(i);
@@ -33,7 +33,24 @@ function run(N, B) {
     }
     const blocks = tree._blocks.filter(Boolean).length;
     console.log(`N=${N} B=${B}: ${fails === 0 ? 'OK' : fails + ' FAILS'} (${blocks} blocks, buffer ${tree._n})`);
+    if (fails) process.exitCode = 1;
 }
+
+function expectThrow(bufferSize, nodeSize) {
+    try {
+        new RBush([0, 0, W, W], bufferSize, nodeSize);
+    } catch {
+        return;
+    }
+    console.log(`  FAIL no error for bufferSize=${bufferSize} nodeSize=${nodeSize}`);
+    process.exitCode = 1;
+}
+
+expectThrow(1, 16);
+expectThrow(256, 1);
+expectThrow(256, 0);
+expectThrow(2.5, 16);
+expectThrow(256, NaN);
 
 run(50, 256);     // buffer-only, no blocks
 run(256, 256);    // exactly one flush

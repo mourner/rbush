@@ -202,6 +202,10 @@ export default class RBush {
      * @param {number} [nodeSize=16] Packed R-tree node size per block.
      */
     constructor(domain = [0, 0, 1, 1], bufferSize = 256, nodeSize = 16) {
+        // nodeSize 1 never reduces a level to a single root; a 1-item class is smaller than its padded leaf node
+        if (!Number.isInteger(nodeSize) || nodeSize < 2) throw new Error(`nodeSize must be an integer ≥ 2, got ${nodeSize}.`);
+        if (!Number.isInteger(bufferSize) || bufferSize < 2) throw new Error(`bufferSize must be an integer ≥ 2, got ${bufferSize}.`);
+
         this.bufferSize = bufferSize;
         this.nodeSize = nodeSize;
         this.length = 0;                                // total number of items added, and the next id
@@ -285,6 +289,12 @@ export default class RBush {
      * @returns {number[]}
      */
     search(minX, minY, maxX, maxY, filterFn) {
+        // padding sentinels (+∞ min, −∞ max) pass the overlap test against infinite query bounds
+        if (minX < -Number.MAX_VALUE) minX = -Number.MAX_VALUE;
+        if (minY < -Number.MAX_VALUE) minY = -Number.MAX_VALUE;
+        if (maxX > Number.MAX_VALUE) maxX = Number.MAX_VALUE;
+        if (maxY > Number.MAX_VALUE) maxY = Number.MAX_VALUE;
+
         const results = [];
 
         for (const block of this._blocks) {
