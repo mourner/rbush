@@ -67,6 +67,9 @@ class RBlock {
         this.indices = indices;
         this.packed = false;     // node MBRs not yet computed; pack() sets this on first search
         this.rootPos = 0;        // box offset of the root node; set by pack()
+        this.firstBatch = 0;     // range of flush batches this block covers: a leaf copy of id i is live
+        this.lastBatch = 0;      // iff batchOf[i] falls within it (set by _flush / merge)
+        this.dead = 0;           // number of stale copies among the leaves; 0 guarantees there are none
     }
 
     /**
@@ -119,9 +122,10 @@ class RBlock {
      * @param {number} maxY
      * @param {((id: number, minX: number, minY: number, maxX: number, maxY: number) => boolean) | undefined} filterFn
      * @param {number[]} results
+     * @param {Uint32Array} [batchOf] Passed only when the block holds dead copies, to skip them.
      */
-    search(minX, minY, maxX, maxY, filterFn, results) {
-        const boxes = this.boxes, indices = this.indices;
+    search(minX, minY, maxX, maxY, filterFn, results, batchOf) {
+        const boxes = this.boxes, indices = this.indices, firstBatch = this.firstBatch, lastBatch = this.lastBatch;
         // every node below the root is exactly nodeSize wide, so the child scan needs no clamp; and
         // since no node group starts in the padded gap, numItems * 4 is the leaf/internal boundary
         const nodeSize4 = this.nodeSize * 4, leafEnd = this.numItems * 4;
@@ -148,9 +152,13 @@ class RBlock {
                 const index = indices[pos >> 2];
                 if (nodeIndex >= leafEnd) {
                     queue.push(index); // internal node — descend later
-                } else if (filterFn === undefined || filterFn(index, x0, y0, x1, y1)) {
-                    results.push(index); // leaf — `index` is the global id
+                    continue;
                 }
+                if (batchOf !== undefined) { // leaf — `index` is the global id; skip it if stale
+                    const batch = batchOf[index];
+                    if (batch < firstBatch || batch > lastBatch) continue;
+                }
+                if (filterFn === undefined || filterFn(index, x0, y0, x1, y1)) results.push(index);
             }
 
             nodeIndex = queue.pop();
@@ -187,6 +195,7 @@ function takeBlock(pool, numItems, nodeSize, bufferSize) {
         block = new RBlock(poolClass, nodeSize, new Int32Array(capacity), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
     }
     block.numItems = numItems;
+    block.dead = 0;
     return block;
 }
 
@@ -216,7 +225,12 @@ export default class RBush {
 
         this.bufferSize = bufferSize;
         this.nodeSize = nodeSize;
-        this.length = 0;                                // total number of items added, and the next id
+        this.size = 0;                                  // number of live items
+
+        this._nextId = 0;                                // next never-used id
+        this._freeIds = [];                              // removed ids, reused LIFO by add
+        this._batch = 1;                                 // current flush batch: the buffer's items belong to it
+        this._batchOf = new Uint32Array(bufferSize);     // id → batch of its live copy, 0 if not live
 
         const [minX, minY, maxX, maxY] = domain;
         this._minX = minX;
@@ -240,7 +254,90 @@ export default class RBush {
      * @param {number} [maxY=minY]
      */
     add(minX, minY, maxX = minX, maxY = minY) {
-        const id = this.length++;
+        let id;
+        if (this._freeIds.length > 0) id = /** @type {number} */ (this._freeIds.pop());
+        else {
+            id = this._nextId++;
+            if (id === this._batchOf.length) { // grow by doubling; new entries are 0 (not live)
+                const batchOf = new Uint32Array(id * 2);
+                batchOf.set(this._batchOf);
+                this._batchOf = batchOf;
+            }
+        }
+        this.size++;
+        this._append(id, minX, minY, maxX, maxY);
+        return id;
+    }
+
+    /**
+     * Remove an item by id. Its id becomes free for reuse by a later add.
+     * @param {number} id
+     */
+    remove(id) {
+        const batch = this._liveBatch(id);
+        if (batch === this._batch) { // still in the buffer: swap the last buffered item into its slot
+            const buffer = this._buffer, boxes = buffer.boxes, ids = buffer.indices;
+            const i = this._bufferSlot(id), last = --this._n;
+            ids[i] = ids[last];
+            boxes.copyWithin(i * 4, last * 4, last * 4 + 4);
+        } else {
+            this._blockOf(batch).dead++;
+        }
+        this._batchOf[id] = 0;
+        this._freeIds.push(id);
+        this.size--;
+    }
+
+    /**
+     * Change an item's box, keeping its id.
+     * @param {number} id
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} [maxX=minX]
+     * @param {number} [maxY=minY]
+     */
+    update(id, minX, minY, maxX = minX, maxY = minY) {
+        const batch = this._liveBatch(id);
+        if (batch === this._batch) { // still in the buffer: overwrite in place
+            const boxes = this._buffer.boxes, p = this._bufferSlot(id) * 4;
+            boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
+        } else { // the block copy goes stale and a fresh one enters the buffer under the same id
+            this._blockOf(batch).dead++;
+            this._append(id, minX, minY, maxX, maxY);
+        }
+    }
+
+    /** @param {number} id */
+    _liveBatch(id) {
+        const batch = this._batchOf[id];
+        if (!(batch > 0)) throw new Error(`Item ${id} is not in the tree.`);
+        return batch;
+    }
+
+    /** @param {number} id */
+    _bufferSlot(id) {
+        const ids = this._buffer.indices;
+        for (let i = 0; i < this._n; i++) if (ids[i] === id) return i;
+        throw new Error(`Item ${id} is missing from the buffer.`); // unreachable while batchOf is consistent
+    }
+
+    /** @param {number} batch */
+    _blockOf(batch) {
+        for (const block of this._blocks) {
+            if (block && batch >= block.firstBatch && batch <= block.lastBatch) return block;
+        }
+        throw new Error(`No block holds batch ${batch}.`); // unreachable while batchOf is consistent
+    }
+
+    /**
+     * @param {number} id
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    _append(id, minX, minY, maxX, maxY) {
+        this._batchOf[id] = this._batch;
         const boxes = this._buffer.boxes;
         const p = this._n * 4;
         boxes[p] = minX;
@@ -249,7 +346,6 @@ export default class RBush {
         boxes[p + 3] = maxY;
         this._buffer.indices[this._n] = id;
         if (++this._n === this.bufferSize) this._flush();
-        return id;
     }
 
     /** Freeze the full buffer into a Hilbert-sorted block at level 0 and carry it up through the levels. */
@@ -272,6 +368,7 @@ export default class RBush {
             keys[i] = hilbert(x, y);
         }
         sort(keys, boxes, run.indices, 0, n - 1); // sort by Hilbert key, boxes + ids follow
+        run.firstBatch = run.lastBatch = this._batch++;
         this._n = 0;
         this._buffer = takeBlock(pool, this.bufferSize, this.nodeSize, this.bufferSize); // borrow a fresh buffer block
 
@@ -281,7 +378,7 @@ export default class RBush {
                 this._blocks[level] = run; // empty slot — settle here as an unpacked leaf run
                 break;
             }
-            run = merge(existing, run, pool, this.bufferSize); // collision — merge leaves and carry to the next level
+            run = merge(existing, run, pool, this.bufferSize, this._batchOf); // collision — merge leaves and carry to the next level
             this._blocks[level] = undefined;
         }
     }
@@ -305,10 +402,13 @@ export default class RBush {
 
         const results = [];
 
-        for (const block of this._blocks) {
+        // indexed, not for…of: once V8 inlines the block search here, the iterator's implicit try-block makes
+        // it ~20% slower
+        for (let i = 0; i < this._blocks.length; i++) {
+            const block = this._blocks[i];
             if (!block) continue;
             if (!block.packed) block.pack(); // lazily build node MBRs on first search
-            block.search(minX, minY, maxX, maxY, filterFn, results);
+            block.search(minX, minY, maxX, maxY, filterFn, results, block.dead > 0 ? this._batchOf : undefined);
         }
 
         // linear scan of the still-mutable buffer block (leaf portion, up to _n)
@@ -328,13 +428,28 @@ export default class RBush {
  * 2-way merge of two Hilbert-sorted leaf runs (or packed blocks — only their leaf portion
  * is read) into a fresh leaf run. Node MBRs, if any, are ignored and not regenerated here;
  * RBlock.pack() rebuilds the tree once the run finally settles and is first searched.
- * @param {RBlock} a
- * @param {RBlock} b
+ * Dead copies in `a` are dropped.
+ * @param {RBlock} a The settled, older block; may hold dead copies.
+ * @param {RBlock} b The carry, newer: the fresh flush or a merge output, so never dirty or empty.
  * @param {RBlock[][]} pool
  * @param {number} bufferSize Base size B, for the output's capacity class.
+ * @param {Uint32Array} batchOf
  */
-function merge(a, b, pool, bufferSize) {
+function merge(a, b, pool, bufferSize, batchOf) {
+    const firstBatch = a.firstBatch, lastBatch = b.lastBatch;
+
+    // filter in place up front (`a` is consumed anyway), so the merge loop below stays branch-free
+    if (a.dead > 0) {
+        dropDead(a, batchOf);
+        if (a.numItems === 0) { // all dead: the carry goes on as is, now covering both batch ranges
+            putBlock(pool, a);
+            b.firstBatch = firstBatch;
+            return b;
+        }
+    }
+
     const al = a.numItems, bl = b.numItems, n = al + bl;
+
     // output sized for the full packed tree (recycled whole from the pool); fill only the leaf portion [0, n)
     const out = takeBlock(pool, n, a.nodeSize, bufferSize);
     const keys = out.keys, boxes = out.boxes, ids = out.indices;
@@ -366,7 +481,33 @@ function merge(a, b, pool, bufferSize) {
     // both inputs are now fully consumed — recycle them for the next same-size blocks
     putBlock(pool, a);
     putBlock(pool, b);
+    out.firstBatch = firstBatch;
+    out.lastBatch = lastBatch;
     return out;
+}
+
+/**
+ * Compact a block's leaf run in place, keeping only live copies (batchOf within the block's batch range).
+ * @param {RBlock} block
+ * @param {Uint32Array} batchOf
+ */
+function dropDead(block, batchOf) {
+    const {keys, boxes, indices, firstBatch, lastBatch, numItems} = block;
+    let k = 0;
+    for (let i = 0; i < numItems; i++) {
+        const batch = batchOf[indices[i]];
+        if (batch < firstBatch || batch > lastBatch) continue;
+        if (k !== i) {
+            keys[k] = keys[i];
+            indices[k] = indices[i];
+            const sp = i * 4, dp = k * 4;
+            boxes[dp] = boxes[sp]; boxes[dp + 1] = boxes[sp + 1]; boxes[dp + 2] = boxes[sp + 2]; boxes[dp + 3] = boxes[sp + 3];
+        }
+        k++;
+    }
+    block.numItems = k;
+    block.dead = 0;
+    block.packed = false;
 }
 
 /** Append the leaf run src[from..numItems) into the output starting at slot k via bulk set(). */
