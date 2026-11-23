@@ -21,10 +21,8 @@
 // `keys` (leaf Hilbert keys, for merging), plus `numItems` and `nodeSize`. Each tree level is
 // padded to a full nodeSize multiple (by pack(), on first search) so every node is the same width
 // and search needs no level-bound check. Separate arrays make build/merge/replacement trivial. Arrays
-// are allocated to a `capacity` size class (B·2^k ≥ numItems), so small blocks are recycled whole through
-// a pool of free lists indexed by that class (a clean slab allocator) instead of reallocated from scratch.
-// A block's pool class is independent of its cascade level (its index in `_blocks`, which keeps blocks in
-// age order): a merge output is sized by the items it actually holds, whatever level it settles at.
+// of small blocks are allocated to a `capacity` size class (B·2^k ≥ numItems) and recycled whole through a
+// pool of free lists indexed by that class (a clean slab allocator); big blocks are allocated to exact size.
 
 const HILBERT_MAX = (1 << 16) - 1;
 
@@ -52,14 +50,14 @@ function padSentinels(boxes, start, end) {
  */
 class RBlock {
     /**
-     * @param {number} poolClass Allocation size class k: capacity === bufferSize << poolClass.
+     * @param {number} poolClass Allocation size class k (capacity B·2ᵏ), or -1 for an exact-size block never pooled.
      * @param {number} nodeSize Packed R-tree node size.
      * @param {Int32Array} keys Leaf Hilbert codes, read only by merge.
      * @param {Float64Array} boxes Full packed-tree size: leaf MBRs at the front, pack() fills node MBRs into the tail.
      * @param {Uint32Array} indices Flatbush dual-purpose: leaf → global id, node → first child's box offset (after pack()).
      */
     constructor(poolClass, nodeSize, keys, boxes, indices) {
-        this.poolClass = poolClass; // size class for the pool (capacity === bufferSize << poolClass)
+        this.poolClass = poolClass; // size class for the pool, or -1 if not pooled
         this.numItems = 0;       // live leaf count, ≤ capacity; set by takeBlock
         this.nodeSize = nodeSize;
         this.keys = keys;
@@ -167,11 +165,12 @@ class RBlock {
 }
 
 /**
- * Take a block holding `numItems` from the pool, or allocate one. Arrays are sized to the capacity class
- * B·2ᵏ ≥ numItems, not numItems itself: insert-path blocks are exactly B·2ᵏ so the two coincide, while
- * load/compaction produce odd sizes — rounding up to the fixed class set makes the pool a clean slab
- * allocator, every freed block reusable by construction. The pool is free lists indexed by class (the
- * cascade frees same-size pairs, so one slot per class wouldn't suffice). Recycled blocks come back dirty:
+ * Take a block holding `numItems` from the pool, or allocate one. Pooled arrays are sized to the capacity class
+ * B·2ᵏ ≥ numItems, not numItems itself: insert-path blocks are exactly B·2ᵏ so the two coincide, while removals
+ * and compaction produce odd sizes — rounding up to the fixed class set makes the pool a clean slab allocator,
+ * every freed block reusable by construction. Classes above MAX_POOLED_ITEMS are never reused, so those blocks
+ * get exact-size arrays instead (up to ~2× less memory for odd sizes). The pool is free lists indexed by class
+ * (the cascade frees same-size pairs, so one slot per class wouldn't suffice). Recycled blocks come back dirty:
  * no zero-fill, since freeze/merge overwrites the leaf portion and pack() the node tail before any search.
  * @param {RBlock[][]} pool free lists indexed by pool class
  * @param {number} numItems
@@ -179,12 +178,11 @@ class RBlock {
  * @param {number} bufferSize Base size B; the smallest capacity class (class 0).
  */
 function takeBlock(pool, numItems, nodeSize, bufferSize) {
-    let capacity = bufferSize, poolClass = 0;
-    while (capacity < numItems) { capacity <<= 1; poolClass++; } // smallest class B·2ᵏ ≥ numItems
-
+    let poolClass = classOf(numItems, bufferSize), capacity = bufferSize * 2 ** poolClass;
+    if (poolClass > 0 && capacity > MAX_POOLED_ITEMS) { poolClass = -1; capacity = numItems; } // never reused: no slack
     const free = pool[poolClass];
     let block;
-    if (free !== undefined && free.length > 0) {
+    if (poolClass >= 0 && free !== undefined && free.length > 0) {
         block = free.pop();
         block.packed = false;     // node MBRs will be rebuilt by pack(); leaf portion gets overwritten now
     } else {
@@ -200,13 +198,24 @@ function takeBlock(pool, numItems, nodeSize, bufferSize) {
 }
 
 /**
- * Return a relieved block to its free list for reuse by the next block of the same capacity class. Blocks
- * above MAX_POOLED_ITEMS are dropped instead, except class 0 (the buffer swap on every flush needs it).
+ * Smallest pool class k with capacity B·2ᵏ ≥ numItems.
+ * @param {number} numItems
+ * @param {number} bufferSize
+ */
+function classOf(numItems, bufferSize) {
+    let capacity = bufferSize, poolClass = 0;
+    while (capacity < numItems) { capacity *= 2; poolClass++; }
+    return poolClass;
+}
+
+/**
+ * Return a relieved block to its free list for reuse by the next block of the same capacity class. Exact-size
+ * blocks (above MAX_POOLED_ITEMS; never class 0, which the buffer swap on every flush needs) are left to GC.
  * @param {RBlock[][]} pool
  * @param {RBlock} block
  */
 function putBlock(pool, block) {
-    if (block.poolClass > 0 && block.keys.length > MAX_POOLED_ITEMS) return;
+    if (block.poolClass < 0) return;
     const free = pool[block.poolClass];
     if (free === undefined) pool[block.poolClass] = [block];
     else free.push(block);
@@ -240,7 +249,7 @@ export default class RBush {
 
         this._pool = [];                                 // pool class → free list of relieved blocks for reuse
         this._n = 0;                                     // items currently in the buffer
-        this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
+        this._blocks = [];                               // frozen blocks in age order, oldest first
         // The mutable buffer is itself a pool block holding the newest ≤ bufferSize items: `add` fills
         // its leaf portion in place, search scans it linearly, and freezing it is zero-copy (see _flush).
         this._buffer = takeBlock(this._pool, bufferSize, nodeSize, bufferSize);
@@ -275,15 +284,15 @@ export default class RBush {
      */
     remove(id) {
         const batch = this._liveBatch(id);
+        this._batchOf[id] = 0;
         if (batch === this._batch) { // still in the buffer: swap the last buffered item into its slot
             const buffer = this._buffer, boxes = buffer.boxes, ids = buffer.indices;
             const i = this._bufferSlot(id), last = --this._n;
             ids[i] = ids[last];
             boxes.copyWithin(i * 4, last * 4, last * 4 + 4);
         } else {
-            this._blockOf(batch).dead++;
+            this._markDead(this._indexOf(batch));
         }
-        this._batchOf[id] = 0;
         this._freeIds.push(id);
         this.size--;
     }
@@ -302,7 +311,9 @@ export default class RBush {
             const boxes = this._buffer.boxes, p = this._bufferSlot(id) * 4;
             boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
         } else { // the block copy goes stale and a fresh one enters the buffer under the same id
-            this._blockOf(batch).dead++;
+            const index = this._indexOf(batch);
+            this._batchOf[id] = this._batch;
+            this._markDead(index);
             this._append(id, minX, minY, maxX, maxY);
         }
     }
@@ -322,11 +333,53 @@ export default class RBush {
     }
 
     /** @param {number} batch */
-    _blockOf(batch) {
-        for (const block of this._blocks) {
-            if (block && batch >= block.firstBatch && batch <= block.lastBatch) return block;
+    _indexOf(batch) {
+        const blocks = this._blocks;
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            if (batch >= blocks[i].firstBatch && batch <= blocks[i].lastBatch) return i;
         }
         throw new Error(`No block holds batch ${batch}.`); // unreachable while batchOf is consistent
+    }
+
+    /**
+     * Count one more stale copy in block `i` (its id's batchOf must already be changed). Once more than half the
+     * block is stale, rebuild it from its live leaves: O(m) against ≥ m/2 removals, amortized O(1) each.
+     * @param {number} i
+     */
+    _markDead(i) {
+        const block = this._blocks[i];
+        if (++block.dead * 2 > block.numItems) this._mergeRange(i, i);
+    }
+
+    /**
+     * Replace blocks lo..hi (adjacent in age) with one merged block, dropping dead copies; remove them altogether
+     * if nothing in them is live (a 0-item block can't be packed).
+     * @param {number} lo
+     * @param {number} hi
+     */
+    _mergeRange(lo, hi) {
+        const blocks = this._blocks;
+        let run = blocks[hi];
+        for (let i = hi - 1; i >= lo; i--) run = merge(blocks[i], run, this._pool, this.bufferSize, this._batchOf);
+        if (run.dead > 0) { // a lone block never went through merge
+            dropDead(run, this._batchOf);
+            run = shrink(run, this._pool, this.bufferSize);
+        }
+        if (run.numItems > 0) {
+            blocks.splice(lo, hi - lo + 1, run);
+        } else {
+            putBlock(this._pool, run);
+            blocks.splice(lo, hi - lo + 1);
+        }
+    }
+
+    /**
+     * Merge the buffer and all blocks into a single block, dropping dead copies. Worth calling once an incremental
+     * build is done and the tree is mostly queried: up to ~log₂(n/B) block descents per search become one.
+     */
+    compact() {
+        if (this._n > 0) this._flush();
+        if (this._blocks.length > 0) this._mergeRange(0, this._blocks.length - 1);
     }
 
     /**
@@ -348,7 +401,13 @@ export default class RBush {
         if (++this._n === this.bufferSize) this._flush();
     }
 
-    /** Freeze the full buffer into a Hilbert-sorted block at level 0 and carry it up through the levels. */
+    /**
+     * Freeze the full buffer into a Hilbert-sorted block and merge it down the stack while the newest block is less
+     * than twice the carry. With fixed-size flushes this is exactly the binary counter (sizes B·2ⁱ); with the odd
+     * sizes left by compact() and dropped dead items, each block still ends up more than twice the size of the next
+     * newer one, so there are O(log n) blocks. (Merging only while newest ≤ carry would let a slightly oversized
+     * block stop every carry just short of it, piling up near-equal blocks.)
+     */
     _flush() {
         const pool = this._pool;
         const n = this._n;
@@ -368,19 +427,16 @@ export default class RBush {
             keys[i] = hilbert(x, y);
         }
         sort(keys, boxes, run.indices, 0, n - 1); // sort by Hilbert key, boxes + ids follow
+        run.numItems = n; // less than bufferSize only when compact() freezes a partial buffer
         run.firstBatch = run.lastBatch = this._batch++;
         this._n = 0;
         this._buffer = takeBlock(pool, this.bufferSize, this.nodeSize, this.bufferSize); // borrow a fresh buffer block
 
-        for (let level = 0; ; level++) {
-            const existing = this._blocks[level];
-            if (!existing) {
-                this._blocks[level] = run; // empty slot — settle here as an unpacked leaf run
-                break;
-            }
-            run = merge(existing, run, pool, this.bufferSize, this._batchOf); // collision — merge leaves and carry to the next level
-            this._blocks[level] = undefined;
+        const blocks = this._blocks;
+        while (blocks.length > 0 && blocks[blocks.length - 1].numItems < 2 * run.numItems) {
+            run = merge(/** @type {RBlock} */ (blocks.pop()), run, pool, this.bufferSize, this._batchOf);
         }
+        blocks.push(run); // settles as an unpacked leaf run
     }
 
     /**
@@ -404,9 +460,9 @@ export default class RBush {
 
         // indexed, not for…of: once V8 inlines the block search here, the iterator's implicit try-block makes
         // it ~20% slower
-        for (let i = 0; i < this._blocks.length; i++) {
-            const block = this._blocks[i];
-            if (!block) continue;
+        const blocks = this._blocks;
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
             if (!block.packed) block.pack(); // lazily build node MBRs on first search
             block.search(minX, minY, maxX, maxY, filterFn, results, block.dead > 0 ? this._batchOf : undefined);
         }
@@ -428,9 +484,9 @@ export default class RBush {
  * 2-way merge of two Hilbert-sorted leaf runs (or packed blocks — only their leaf portion
  * is read) into a fresh leaf run. Node MBRs, if any, are ignored and not regenerated here;
  * RBlock.pack() rebuilds the tree once the run finally settles and is first searched.
- * Dead copies in `a` are dropped.
- * @param {RBlock} a The settled, older block; may hold dead copies.
- * @param {RBlock} b The carry, newer: the fresh flush or a merge output, so never dirty or empty.
+ * Dead copies are dropped; the output is empty only if both inputs hold nothing live.
+ * @param {RBlock} a The older block.
+ * @param {RBlock} b The newer block (in the flush cascade, the carry: never dirty or empty).
  * @param {RBlock[][]} pool
  * @param {number} bufferSize Base size B, for the output's capacity class.
  * @param {Uint32Array} batchOf
@@ -438,14 +494,15 @@ export default class RBush {
 function merge(a, b, pool, bufferSize, batchOf) {
     const firstBatch = a.firstBatch, lastBatch = b.lastBatch;
 
-    // filter in place up front (`a` is consumed anyway), so the merge loop below stays branch-free
-    if (a.dead > 0) {
-        dropDead(a, batchOf);
-        if (a.numItems === 0) { // all dead: the carry goes on as is, now covering both batch ranges
-            putBlock(pool, a);
-            b.firstBatch = firstBatch;
-            return b;
-        }
+    // filter in place up front (inputs are consumed anyway), so the merge loop below stays branch-free
+    if (a.dead > 0) dropDead(a, batchOf);
+    if (b.dead > 0) dropDead(b, batchOf);
+    if (a.numItems === 0 || b.numItems === 0) { // one side all dead: the other goes on, covering both ranges
+        const keep = a.numItems === 0 ? b : a;
+        putBlock(pool, keep === a ? b : a);
+        keep.firstBatch = firstBatch;
+        keep.lastBatch = lastBatch;
+        return shrink(keep, pool, bufferSize);
     }
 
     const al = a.numItems, bl = b.numItems, n = al + bl;
@@ -508,6 +565,24 @@ function dropDead(block, batchOf) {
     block.numItems = k;
     block.dead = 0;
     block.packed = false;
+}
+
+/**
+ * Move a block's leaves into a fresh block if that would at least halve its allocation (the next smaller class
+ * for a pooled block; for an exact-size one, once its live items fit in half its capacity).
+ * @param {RBlock} block
+ * @param {RBlock[][]} pool
+ * @param {number} bufferSize
+ */
+function shrink(block, pool, bufferSize) {
+    const n = block.numItems;
+    if (n === 0 || block.poolClass === 0 || n * 2 > block.keys.length) return block;
+    const out = takeBlock(pool, n, block.nodeSize, bufferSize);
+    appendTail(block.keys, block.boxes, block.indices, 0, n, out.keys, out.boxes, out.indices, 0);
+    out.firstBatch = block.firstBatch;
+    out.lastBatch = block.lastBatch;
+    putBlock(pool, block);
+    return out;
 }
 
 /** Append the leaf run src[from..numItems) into the output starting at slot k via bulk set(). */

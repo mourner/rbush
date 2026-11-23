@@ -63,7 +63,7 @@ const {tree: t, total, maxSpike, over1ms, spikes} = best;
 
 console.log(`inserted in ${total.toFixed(1)} ms (${(N / total / 1000).toFixed(2)} M ops/s)`);
 console.log(`inserts > 1ms: ${over1ms}, biggest spikes: ${spikes.sort((a, b) => b - a).slice(0, 5).join(', ')}`);
-console.log(`${t._blocks.length} levels, ${t._blocks.filter(Boolean).length} blocks`);
+console.log(`${t._blocks.length} blocks: ${t._blocks.map(b => b.numItems).join(" ")}`);
 
 // static-build ceiling: bufSize = N → one quicksort, no merges (Flatbush-equivalent)
 const staticBest = bestOf(N).total;

@@ -49,15 +49,19 @@ function check(tree, items, live, n) {
 
     // white-box: each block's dead count must match its stale copies exactly — an undercount lets a
     // merge or search treat a stale copy (possibly of a since-reused id) as live
+    let prev;
     for (const block of tree._blocks) {
-        if (!block) continue;
         assert.ok(block.numItems > 0, `empty block settled after ${n} ops`);
+        assert.ok(block.firstBatch <= block.lastBatch && block.lastBatch < tree._batch, `batch range after ${n} ops`);
+        if (prev) assert.ok(prev.lastBatch < block.firstBatch, `blocks out of age order after ${n} ops`);
+        prev = block;
         let stale = 0;
         for (let i = 0; i < block.numItems; i++) {
             const batch = tree._batchOf[block.indices[i]];
             if (batch < block.firstBatch || batch > block.lastBatch) stale++;
         }
         assert.equal(block.dead, stale, `dead count after ${n} ops`);
+        assert.ok(stale * 2 <= block.numItems, `block over half dead after ${n} ops`);
     }
 
     for (let i = 0; i < QUERIES_PER_CHECK; i++) {
@@ -119,6 +123,7 @@ function fuzz(bufferSize, nodeSize) {
             }
         }
 
+        if (rnd() < 0.003) tree.compact();
         if (n % CHECK_EVERY === 0 || n === NUM_OPS) check(tree, items, live, n);
     }
 }
@@ -136,6 +141,43 @@ test('rejects invalid config', () => {
     for (const [bufferSize, nodeSize] of [[1, 16], [256, 1], [256, 0], [2.5, 16], [256, NaN]]) {
         assert.throws(() => new RBush([0, 0, W, W], bufferSize, nodeSize), Error, `${bufferSize}, ${nodeSize}`);
     }
+});
+
+test('compact merges everything into one block', () => {
+    const tree = new RBush([0, 0, W, W], 16, 4);
+    const ids = [];
+    for (let i = 0; i < 1000; i++) ids.push(tree.add(i % W, (i * 7) % W));
+    for (let i = 0; i < 1000; i += 3) tree.remove(ids[i]);
+    tree.compact();
+    assert.equal(tree._blocks.length, 1);
+    assert.equal(tree._n, 0);
+    assert.equal(tree._blocks[0].numItems, tree.size);
+    assert.equal(tree.search(-Infinity, -Infinity, Infinity, Infinity).length, tree.size);
+
+    for (const id of ids) if (id % 3 !== 0) tree.remove(id); // drain: compaction vacates every level
+    assert.equal(tree._blocks.length, 0);
+    tree.compact();
+    assert.equal(tree.search(-Infinity, -Infinity, Infinity, Infinity).length, 0);
+});
+
+test('blocks too big to pool get exact-size arrays and shrink when half dead', () => {
+    const tree = new RBush([0, 0, W, W], 256, 16);
+    const n = 200_000, ids = [];
+    for (let i = 0; i < n; i++) ids.push(tree.add(i % W, (i * 7) % W));
+    tree.compact();
+    let block = tree._blocks[0];
+    assert.equal(block.poolClass, -1);
+    assert.equal(block.keys.length, n);
+
+    const removed = 110_000; // past half dead, rebuilt from the live half (still too big to pool), then 5% more
+    for (let i = 0; i < removed; i++) tree.remove(ids[i]);
+    block = tree._blocks[0];
+    assert.equal(tree._blocks.length, 1);
+    assert.equal(block.poolClass, -1);
+    assert.equal(block.keys.length, n / 2 - 1);
+    assert.equal(block.dead, removed - (n / 2 + 1));
+    assert.equal(tree.search(-Infinity, -Infinity, Infinity, Infinity).length, n - removed);
+    assert.deepEqual(tree.search(0, 0, 0, 0).sort((a, b) => a - b), ids.filter((id, i) => i >= removed && i % W === 0));
 });
 
 for (const bufferSize of BUFFER_SIZES) {
