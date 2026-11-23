@@ -22,7 +22,9 @@
 // padded to a full nodeSize multiple (by pack(), on first search) so every node is the same width
 // and search needs no level-bound check. Separate arrays make build/merge/replacement trivial. Arrays
 // are allocated to a `capacity` size class (B·2^k ≥ numItems), so every block is recycled whole through
-// a pool of free lists indexed by level (a clean slab allocator) instead of reallocated from scratch.
+// a pool of free lists indexed by that class (a clean slab allocator) instead of reallocated from scratch.
+// A block's pool class is independent of its cascade level (its index in `_blocks`, which keeps blocks in
+// age order): a merge output is sized by the items it actually holds, whatever level it settles at.
 
 const HILBERT_MAX = (1 << 16) - 1;
 
@@ -46,14 +48,14 @@ function padSentinels(boxes, start, end) {
  */
 class RBlock {
     /**
-     * @param {number} level Cascade slot and pool index in one (k in B·2ᵏ); capacity === bufferSize << level.
+     * @param {number} poolClass Allocation size class k: capacity === bufferSize << poolClass.
      * @param {number} nodeSize Packed R-tree node size.
      * @param {Int32Array} keys Leaf Hilbert codes, read only by merge.
      * @param {Float64Array} boxes Full packed-tree size: leaf MBRs at the front, pack() fills node MBRs into the tail.
      * @param {Uint32Array} indices Flatbush dual-purpose: leaf → global id, node → first child's box offset (after pack()).
      */
-    constructor(level, nodeSize, keys, boxes, indices) {
-        this.level = level;      // cascade slot + pool size-class index (capacity === bufferSize << level)
+    constructor(poolClass, nodeSize, keys, boxes, indices) {
+        this.poolClass = poolClass; // size class for the pool (capacity === bufferSize << poolClass)
         this.numItems = 0;       // live leaf count, ≤ capacity; set by takeBlock
         this.nodeSize = nodeSize;
         this.keys = keys;
@@ -156,19 +158,19 @@ class RBlock {
  * Take a block holding `numItems` from the pool, or allocate one. Arrays are sized to the capacity class
  * B·2ᵏ ≥ numItems, not numItems itself: insert-path blocks are exactly B·2ᵏ so the two coincide, while
  * load/compaction produce odd sizes — rounding up to the fixed class set makes the pool a clean slab
- * allocator, every freed block reusable by construction. The pool is free lists indexed by level (the
- * cascade frees same-size pairs, so one slot per level wouldn't suffice). Recycled blocks come back dirty:
+ * allocator, every freed block reusable by construction. The pool is free lists indexed by class (the
+ * cascade frees same-size pairs, so one slot per class wouldn't suffice). Recycled blocks come back dirty:
  * no zero-fill, since freeze/merge overwrites the leaf portion and pack() the node tail before any search.
- * @param {RBlock[][]} pool free lists indexed by level
+ * @param {RBlock[][]} pool free lists indexed by pool class
  * @param {number} numItems
  * @param {number} nodeSize
- * @param {number} bufferSize Base size B; the smallest capacity class (level 0).
+ * @param {number} bufferSize Base size B; the smallest capacity class (class 0).
  */
 function takeBlock(pool, numItems, nodeSize, bufferSize) {
-    let capacity = bufferSize, level = 0;
-    while (capacity < numItems) { capacity <<= 1; level++; } // smallest class B·2ᵏ ≥ numItems
+    let capacity = bufferSize, poolClass = 0;
+    while (capacity < numItems) { capacity <<= 1; poolClass++; } // smallest class B·2ᵏ ≥ numItems
 
-    const free = pool[level];
+    const free = pool[poolClass];
     let block;
     if (free !== undefined && free.length > 0) {
         block = free.pop();
@@ -178,20 +180,20 @@ function takeBlock(pool, numItems, nodeSize, bufferSize) {
         // plus bottom-up parents, every non-root level padded to a full nodeSize multiple (see pack()).
         let e = capacity, numNodes = 1;
         while (e !== 1) { e = Math.ceil(e / nodeSize); numNodes += e * nodeSize; }
-        block = new RBlock(level, nodeSize, new Int32Array(capacity), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
+        block = new RBlock(poolClass, nodeSize, new Int32Array(capacity), new Float64Array(numNodes * 4), new Uint32Array(numNodes));
     }
     block.numItems = numItems;
     return block;
 }
 
 /**
- * Return a relieved block to its free list for reuse by the next block of the same level (capacity class).
+ * Return a relieved block to its free list for reuse by the next block of the same capacity class.
  * @param {RBlock[][]} pool
  * @param {RBlock} block
  */
 function putBlock(pool, block) {
-    const free = pool[block.level];
-    if (free === undefined) pool[block.level] = [block];
+    const free = pool[block.poolClass];
+    if (free === undefined) pool[block.poolClass] = [block];
     else free.push(block);
 }
 
@@ -216,7 +218,7 @@ export default class RBush {
         this._scaleX = HILBERT_MAX / ((maxX - minX) || 1); // center → [0, HILBERT_MAX] grid
         this._scaleY = HILBERT_MAX / ((maxY - minY) || 1);
 
-        this._pool = [];                                 // level → free list of relieved blocks for reuse
+        this._pool = [];                                 // pool class → free list of relieved blocks for reuse
         this._n = 0;                                     // items currently in the buffer
         this._blocks = [];                               // _blocks[i] = packed block at level i (or undefined)
         // The mutable buffer is itself a pool block holding the newest ≤ bufferSize items: `add` fills
@@ -244,12 +246,12 @@ export default class RBush {
         return id;
     }
 
-    /** Freeze the full buffer into a Hilbert-sorted level-0 block and carry it up through the levels. */
+    /** Freeze the full buffer into a Hilbert-sorted block at level 0 and carry it up through the levels. */
     _flush() {
         const pool = this._pool;
         const n = this._n;
 
-        // The buffer is already a level-0 block, so freezing is an in-place sort: compute Hilbert keys,
+        // The buffer is already a class-0 block, so freezing is an in-place sort: compute Hilbert keys,
         // sort keys/boxes/indices together, hand the block to the cascade, borrow a fresh one. Node MBRs
         // are left for lazy packing on first search — carry blocks get re-merged before any query.
         let run = this._buffer;
