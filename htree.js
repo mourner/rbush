@@ -1,297 +1,516 @@
-// Prototype of a single-tree alternative to the block cascade in index-v5.js: a B+-tree over Hilbert keys where every
-// entry also carries a bounding box (a Hilbert R-tree). Flat typed-array arena, fixed nodes of M slots; unused slots
-// hold sentinel boxes (never match a query, no-ops in MBRs) and MAX_KEY keys. Leaves are unordered bags covering a
-// contiguous key range; internal nodes are ordered by their children's max keys. Not tuned or hardened: ids are not
-// reused, nodes are never merged on underflow, and the arena grows by doubling.
-const M = 16, H = M / 2, HILBERT_MAX = (1 << 16) - 1, MAX_KEY = 0x3fffffff; // keys are 31-bit, so a key difference fits int32 and its sign bit is the comparison
+// A dynamic spatial index as a single B+-tree over Hilbert keys where every entry also carries a bounding box (a
+// Hilbert R-tree, Kamel & Faloutsos), stored Flatbush-style in one flat typed-array arena.
+//
+// The arena is a sequence of fixed nodes of M slots. A slot holds a box, a key and a pointer: in a leaf, an item's
+// box, its Hilbert key and its id; in an internal node, a child's MBR, the largest key below it and the child's
+// node index. Leaves are unordered bags of items whose keys fall in one contiguous range; internal nodes keep their
+// children ordered by key. Unused slots hold sentinel boxes (+∞ min / −∞ max: never match a query, no-ops in MBRs)
+// and MAX_KEY, so search scans every node at full width with no counts.
+//
+// Not hardened yet: ids are not reused or validated, nodes are never merged on underflow, the arena grows by
+// doubling, and the Hilbert domain is fixed at construction.
+
+const M = 16;     // slots per node; the child pick in _insert is unrolled for this value
+const HALF = M / 2;
+
+const HILBERT_MAX = (1 << 16) - 1;
+
+// Keys are the 32-bit Hilbert code shifted to 31 bits, in [-2^30, 2^30): every key is an SMI even with pointer
+// compression, and a difference of two keys fits an int32, so its sign bit is the comparison.
+const MAX_KEY = 0x3fffffff;
 
 export default class HTree {
-    constructor(domain = [0, 0, 1, 1], cap = 64) {
+    /**
+     * @param {[number, number, number, number]} [domain] Coordinate bounds [minX, minY, maxX, maxY] for the Hilbert grid.
+     * @param {number} [initialNodes=64] Initial arena capacity in nodes.
+     */
+    constructor(domain = [0, 0, 1, 1], initialNodes = 64) {
+        this.size = 0;                                   // number of live items
+        this.inPlace = 0;                                // stats: updates that kept the item in its leaf
+
         const [minX, minY, maxX, maxY] = domain;
-        this._minX = minX; this._minY = minY;
-        this._scaleX = HILBERT_MAX / (maxX - minX); this._scaleY = HILBERT_MAX / (maxY - minY);
-        this.cap = cap;
-        this.boxes = new Float64Array(cap * M * 4); // slot → box (leaf: item box, internal: child MBR)
-        this.keys = new Int32Array(cap * M);        // slot → Hilbert key (leaf: item key, internal: child's max key)
-        this.ptrs = new Uint32Array(cap * M);       // slot → item id (leaf) or child node (internal)
-        this.count = new Uint8Array(cap);           // node → used slots
-        this.parent = new Uint32Array(cap);         // node → parent node
-        this.leafOf = new Uint32Array(1024);        // item id → leaf node holding it
-        this.free = [];                             // freed nodes (fully padded), reused by _alloc
-        this.numNodes = 0;
-        this.nextId = 0;
-        this.size = 0;
-        this.height = 1;
-        this.path = new Uint32Array(16);            // level → slot taken by the last descent
-        this.inPlace = 0;                           // stats: updates done without moving the item
-        this._a = 0; this._b = 0;
-        this.root = this._alloc();
+        this._minX = minX;
+        this._minY = minY;
+        this._scaleX = HILBERT_MAX / ((maxX - minX) || 1); // center → [0, HILBERT_MAX] grid
+        this._scaleY = HILBERT_MAX / ((maxY - minY) || 1);
+
+        this._capacity = initialNodes;
+        this._boxes = new Float64Array(initialNodes * M * 4); // slot → item box (leaf) or child MBR (internal)
+        this._keys = new Int32Array(initialNodes * M);        // slot → item key (leaf) or child's max key (internal)
+        this._ptrs = new Uint32Array(initialNodes * M);       // slot → item id (leaf) or child node (internal)
+        this._count = new Uint8Array(initialNodes);           // node → used slots
+        this._parent = new Uint32Array(initialNodes);         // node → parent node
+        this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
+        this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
+
+        this._leafOf = new Uint32Array(1024);                 // id → leaf node holding it
+        this._nextId = 0;
+
+        this._height = 1;
+        this._path = new Uint32Array(16);                     // level → slot taken by the last _insert descent
+        this._splitKey = 0;                                   // largest key left in the lower half by _splitLeaf
+        this._root = this._alloc();
     }
-    _alloc() {
-        if (this.free.length > 0) return this.free.pop();
-        if (this.numNodes === this.cap) {
-            const cap = this.cap *= 2;
-            const boxes = new Float64Array(cap * M * 4); boxes.set(this.boxes); this.boxes = boxes;
-            const keys = new Int32Array(cap * M); keys.set(this.keys); this.keys = keys;
-            const ptrs = new Uint32Array(cap * M); ptrs.set(this.ptrs); this.ptrs = ptrs;
-            const count = new Uint8Array(cap); count.set(this.count); this.count = count;
-            const parent = new Uint32Array(cap); parent.set(this.parent); this.parent = parent;
-        }
-        const node = this.numNodes++;
-        this._pad(node * M, node * M + M);
-        return node;
-    }
-    _pad(from, to) {
-        const boxes = this.boxes, keys = this.keys;
-        for (let s = from; s < to; s++) {
-            const p = s * 4;
-            keys[s] = MAX_KEY;
-            boxes[p] = Infinity; boxes[p + 1] = Infinity; boxes[p + 2] = -Infinity; boxes[p + 3] = -Infinity;
-        }
-    }
-    _copy(from, to) {
-        const boxes = this.boxes, f = from * 4, t = to * 4;
-        this.keys[to] = this.keys[from]; this.ptrs[to] = this.ptrs[from];
-        boxes[t] = boxes[f]; boxes[t + 1] = boxes[f + 1]; boxes[t + 2] = boxes[f + 2]; boxes[t + 3] = boxes[f + 3];
-    }
-    _key(minX, minY, maxX, maxY) {
-        const x = clamp(this._scaleX * ((minX + maxX) / 2 - this._minX)) | 0;
-        const y = clamp(this._scaleY * ((minY + maxY) / 2 - this._minY)) | 0;
-        return hilbert(x, y) >> 1;
-    }
+
+    /**
+     * Add a box, returning its id.
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} [maxX=minX]
+     * @param {number} [maxY=minY]
+     */
     add(minX, minY, maxX = minX, maxY = minY) {
-        const id = this.nextId++;
-        if (id === this.leafOf.length) { const l = new Uint32Array(id * 2); l.set(this.leafOf); this.leafOf = l; }
+        const id = this._nextId++;
+        if (id === this._leafOf.length) this._leafOf = grow(this._leafOf, id * 2);
         this.size++;
         this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
         return id;
     }
-    _insert(id, key, minX, minY, maxX, maxY) {
-        let boxes = this.boxes, keys = this.keys, ptrs = this.ptrs;
-        const count = this.count, path = this.path;
 
-        // walk down: at each level take the first child whose max key is ≥ the new key, growing its box on the way
-        let node = this.root;
-        for (let level = this.height - 1; level > 0; level--) {
-            const b = node * M, c = count[node];
-            // branch-free rank among the child keys (unused slots hold MAX_KEY, so they never count)
-            let s = ((keys[b] - key) >>> 31) + ((keys[b + 1] - key) >>> 31) + ((keys[b + 2] - key) >>> 31) + ((keys[b + 3] - key) >>> 31) +
-                ((keys[b + 4] - key) >>> 31) + ((keys[b + 5] - key) >>> 31) + ((keys[b + 6] - key) >>> 31) + ((keys[b + 7] - key) >>> 31) +
-                ((keys[b + 8] - key) >>> 31) + ((keys[b + 9] - key) >>> 31) + ((keys[b + 10] - key) >>> 31) + ((keys[b + 11] - key) >>> 31) +
-                ((keys[b + 12] - key) >>> 31) + ((keys[b + 13] - key) >>> 31) + ((keys[b + 14] - key) >>> 31);
-            if (s >= c) s = c - 1;
+    /**
+     * Remove an item by id.
+     * @param {number} id
+     */
+    remove(id) {
+        this._detach(id);
+        this.size--;
+    }
+
+    /**
+     * Change an item's box, keeping its id. The item stays in its leaf if the new key is still inside the leaf's
+     * key range; otherwise it is detached and inserted again.
+     * @param {number} id
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} [maxX=minX]
+     * @param {number} [maxY=minY]
+     */
+    update(id, minX, minY, maxX = minX, maxY = minY) {
+        const key = this._key(minX, minY, maxX, maxY);
+        const keys = this._keys, ptrs = this._ptrs;
+        const leaf = this._leafOf[id], base = leaf * M;
+
+        let stay = leaf === this._root;
+        let e = -1; // the leaf's entry in its parent
+        if (!stay) {
+            const pb = this._parent[leaf] * M;
+            e = pb;
+            while (ptrs[e] !== leaf) e++;
+
+            if (key <= keys[e]) {
+                if (e > pb) {
+                    stay = key > keys[e - 1];
+                } else { // first child: its lower bound lives further up, so settle for the leaf's own min key
+                    let min = keys[base];
+                    for (let i = base + 1, end = base + this._count[leaf]; i < end; i++) min = Math.min(min, keys[i]);
+                    stay = key >= min;
+                }
+            }
+        }
+
+        if (!stay) {
+            this._detach(id);
+            this._insert(id, key, minX, minY, maxX, maxY);
+            return;
+        }
+
+        let s = base;
+        while (ptrs[s] !== id) s++;
+
+        // the leaf's entry can only change if the item was on its border (or held its max key) before the move,
+        // or sticks out after it; otherwise nothing above needs a look
+        const boxes = this._boxes, p = s * 4, q = e * 4;
+        const inner = e >= 0 && keys[s] < keys[e] && key < keys[e] &&
+            boxes[p] > boxes[q] && boxes[p + 1] > boxes[q + 1] && boxes[p + 2] < boxes[q + 2] && boxes[p + 3] < boxes[q + 3] &&
+            minX > boxes[q] && minY > boxes[q + 1] && maxX < boxes[q + 2] && maxY < boxes[q + 3];
+
+        keys[s] = key;
+        boxes[p] = minX;
+        boxes[p + 1] = minY;
+        boxes[p + 2] = maxX;
+        boxes[p + 3] = maxY;
+        this.inPlace++;
+
+        if (!inner) this._refit(leaf);
+    }
+
+    /**
+     * Get an item's box as [minX, minY, maxX, maxY].
+     * @param {number} id
+     */
+    getBox(id) {
+        const ptrs = this._ptrs;
+        let s = this._leafOf[id] * M;
+        while (ptrs[s] !== id) s++;
+        return Array.from(this._boxes.subarray(s * 4, s * 4 + 4));
+    }
+
+    /**
+     * Find the ids of all items whose boxes intersect the query box.
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    search(minX, minY, maxX, maxY) {
+        // infinite query bounds would match the sentinel boxes in unused slots
+        minX = Math.max(minX, -Number.MAX_VALUE);
+        minY = Math.max(minY, -Number.MAX_VALUE);
+        maxX = Math.min(maxX, Number.MAX_VALUE);
+        maxY = Math.min(maxY, Number.MAX_VALUE);
+
+        const boxes = this._boxes, ptrs = this._ptrs;
+        const results = [], queue = [];
+        let node = this._root;
+        let level = this._height - 1;
+
+        while (true) {
+            const end = (node + 1) * M * 4;
+
+            for (let pos = node * M * 4; pos < end; pos += 4) {
+                if (maxX < boxes[pos]) continue; // sentinels (minX = +∞) never match
+                if (maxY < boxes[pos + 1]) continue;
+                if (minX > boxes[pos + 2]) continue;
+                if (minY > boxes[pos + 3]) continue;
+
+                const ptr = ptrs[pos >> 2];
+                if (level > 0) queue.push(ptr * 16 + level - 1); // child node and its level in one number
+                else results.push(ptr);
+            }
+
+            if (queue.length === 0) break;
+            const next = /** @type {number} */ (queue.pop());
+            node = next >> 4;
+            level = next & 15;
+        }
+
+        return results;
+    }
+
+    /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
+    bytes() {
+        return this._numNodes * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
+    }
+
+    /**
+     * Walk down to the leaf whose key range takes `key`, growing boxes and max keys on the way, and append the item
+     * there, splitting the leaf (and up the tree) if it's full.
+     * @param {number} id
+     * @param {number} key
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    _insert(id, key, minX, minY, maxX, maxY) {
+        const boxes = this._boxes, keys = this._keys, ptrs = this._ptrs, count = this._count, path = this._path;
+
+        // at each level take the first child whose max key is ≥ the new key: its rank among the child keys,
+        // as a branch-free sum of sign bits (unused slots hold MAX_KEY, so they never count)
+        let node = this._root;
+        for (let level = this._height - 1; level > 0; level--) {
+            const b = node * M, n = count[node];
+            let s =
+                ((keys[b] - key) >>> 31) + ((keys[b + 1] - key) >>> 31) +
+                ((keys[b + 2] - key) >>> 31) + ((keys[b + 3] - key) >>> 31) +
+                ((keys[b + 4] - key) >>> 31) + ((keys[b + 5] - key) >>> 31) +
+                ((keys[b + 6] - key) >>> 31) + ((keys[b + 7] - key) >>> 31) +
+                ((keys[b + 8] - key) >>> 31) + ((keys[b + 9] - key) >>> 31) +
+                ((keys[b + 10] - key) >>> 31) + ((keys[b + 11] - key) >>> 31) +
+                ((keys[b + 12] - key) >>> 31) + ((keys[b + 13] - key) >>> 31) +
+                ((keys[b + 14] - key) >>> 31);
+            if (s >= n) s = n - 1; // past the last child's max key: extend the last child
             s += b;
             path[level] = s;
+
             const p = s * 4;
             if (minX < boxes[p]) boxes[p] = minX;
             if (minY < boxes[p + 1]) boxes[p + 1] = minY;
             if (maxX > boxes[p + 2]) boxes[p + 2] = maxX;
             if (maxY > boxes[p + 3]) boxes[p + 3] = maxY;
             if (key > keys[s]) keys[s] = key;
+
             node = ptrs[s];
         }
-        const split = count[node] === M;
-        if (split) { // may reallocate the arena
-            node = this._splitLeaf(node, key);
-            boxes = this.boxes; keys = this.keys; ptrs = this.ptrs;
+
+        let leaf = node, sibling = -1;
+        if (count[node] === M) {
+            sibling = this._splitLeaf(node);
+            if (key > this._splitKey) leaf = sibling;
         }
-        const s = node * M + this.count[node]++, p = s * 4;
-        keys[s] = key; ptrs[s] = id;
-        boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
-        this.leafOf[id] = node;
-        if (split) this._register(); // parent entries are computed once the item has landed
+
+        // a split may have reallocated the arena
+        const s = leaf * M + this._count[leaf]++, p = s * 4, nb = this._boxes;
+        this._keys[s] = key;
+        this._ptrs[s] = id;
+        nb[p] = minX;
+        nb[p + 1] = minY;
+        nb[p + 2] = maxX;
+        nb[p + 3] = maxY;
+        this._leafOf[id] = leaf;
+
+        // parent entries are computed once the item has landed
+        if (sibling !== -1) this._addSibling(node, sibling);
     }
-    // move the upper half (by key) of a full leaf into a new leaf; returns the half the new key belongs to.
-    // Leaves are unordered, so nothing is sorted: entries are ranked and each one moves at most once.
-    _splitLeaf(node, key) {
-        const base = node * M;
-        const nn = this._alloc(), nb = nn * M, keys = this.keys, leafOf = this.leafOf, ptrs = this.ptrs;
-        // rank of each key among the 16 (ties by slot), as sums of sign bits: no data-dependent branches
-        let mask = 0, lowMax = 0, to = nb;
+
+    /**
+     * Move the upper half (by key) of a full leaf into a new leaf and return it; the largest key left in the lower
+     * half goes to _splitKey. Leaves are unordered, so nothing is sorted: each entry is ranked among the M keys
+     * (ties by slot) with sign-bit sums, and moves at most once.
+     * @param {number} leaf
+     */
+    _splitLeaf(leaf) {
+        const sibling = this._alloc();
+        const keys = this._keys, ptrs = this._ptrs, leafOf = this._leafOf;
+        const base = leaf * M;
+
+        let upper = 0; // bit i set: slot i moves to the sibling
         for (let i = 0; i < M; i++) {
             const k = keys[base + i];
             let rank = i;
             for (let j = 0; j < i; j++) rank -= (k - keys[base + j]) >>> 31;
             for (let j = i + 1; j < M; j++) rank += (keys[base + j] - k) >>> 31;
-            if (rank === H - 1) lowMax = k;
-            if (rank >= H) mask |= 1 << i;
+            if (rank === HALF - 1) this._splitKey = k;
+            if (rank >= HALF) upper |= 1 << i;
         }
+
+        let to = sibling * M;
         for (let i = 0; i < M; i++) {
-            if ((mask & (1 << i)) === 0) continue;
+            if ((upper & (1 << i)) === 0) continue;
             this._copy(base + i, to++);
-            leafOf[ptrs[base + i]] = nn;
+            leafOf[ptrs[base + i]] = sibling;
         }
-        for (let h = 0, u = H; h < H; h++) { // fill the holes in the lower slots with the stayers from the upper slots
-            if ((mask & (1 << h)) === 0) continue;
-            while ((mask & (1 << u)) !== 0) u++;
-            this._copy(base + u++, base + h);
+
+        // fill the holes in the lower slots with the stayers from the upper slots
+        for (let i = 0, j = HALF; i < HALF; i++) {
+            if ((upper & (1 << i)) === 0) continue;
+            while ((upper & (1 << j)) !== 0) j++;
+            this._copy(base + j++, base + i);
         }
-        this._pad(base + H, base + M);
-        this.count[node] = H; this.count[nn] = H;
-        this._a = node; this._b = nn;
-        return key <= lowMax ? node : nn;
+
+        this._pad(base + HALF, base + M);
+        this._count[leaf] = HALF;
+        this._count[sibling] = HALF;
+        return sibling;
     }
-    // write the entry for `child` (its exact MBR and max key) into slot s
+
+    /**
+     * After `node` split into (`node`, `sibling`), rewrite node's entry in the parent and insert the sibling's entry
+     * right after it, splitting full parents up to a new root. Relies on _path from the descent that led here.
+     * @param {number} node
+     * @param {number} sibling
+     */
+    _addSibling(node, sibling) {
+        // _alloc may grow the arena, so arrays are read from `this` rather than cached
+        for (let level = 1; ; level++) {
+            if (level === this._height) { // the root split: grow a new root above both halves
+                const root = this._alloc();
+                this._setEntry(root * M, node);
+                this._setEntry(root * M + 1, sibling);
+                this._count[root] = 2;
+                this._parent[node] = root;
+                this._parent[sibling] = root;
+                this._root = root;
+                this._height++;
+                return;
+            }
+
+            let s = this._path[level];
+            const p = Math.floor(s / M);
+            this._setEntry(s, node);
+
+            // a full parent splits too; internal entries are ordered, so the upper half moves as is
+            let split = -1;
+            if (this._count[p] === M) {
+                split = this._alloc();
+                const from = p * M + HALF, to = split * M, ptrs = this._ptrs;
+                for (let i = 0; i < HALF; i++) {
+                    this._copy(from + i, to + i);
+                    this._parent[ptrs[to + i]] = split;
+                }
+                this._pad(from, p * M + M);
+                this._count[p] = HALF;
+                this._count[split] = HALF;
+                if (s >= from) s += to - from; // node's entry moved along
+            }
+
+            // shift the entries after node's one to make room for the sibling's
+            const host = Math.floor(s / M), at = s + 1;
+            for (let i = host * M + this._count[host]; i > at; i--) this._copy(i - 1, i);
+            this._setEntry(at, sibling);
+            this._parent[sibling] = host;
+            this._count[host]++;
+
+            if (split === -1) return;
+            node = p;
+            sibling = split;
+        }
+    }
+
+    /**
+     * Take an item out of its leaf (swap-remove) and tighten the entries above.
+     * @param {number} id
+     */
+    _detach(id) {
+        const leaf = this._leafOf[id], ptrs = this._ptrs;
+        const last = leaf * M + --this._count[leaf];
+
+        let s = leaf * M;
+        while (ptrs[s] !== id) s++;
+        if (s !== last) this._copy(last, s);
+        this._pad(last, last + 1);
+
+        this._refit(leaf);
+    }
+
+    /**
+     * Recompute exact parent entries from `node` upward until one comes out unchanged. Emptied nodes are unlinked
+     * from their parents and freed.
+     * @param {number} node
+     */
+    _refit(node) {
+        const parent = this._parent, count = this._count, ptrs = this._ptrs;
+
+        while (node !== this._root) {
+            const p = parent[node];
+            let s = p * M;
+            while (ptrs[s] !== node) s++;
+
+            if (count[node] === 0) {
+                const last = p * M + --count[p];
+                for (let i = s; i < last; i++) this._copy(i + 1, i);
+                this._pad(last, last + 1);
+                this._freeNodes.push(node);
+
+            } else if (!this._setEntry(s, node)) {
+                return;
+            }
+            node = p;
+        }
+
+        if (count[node] === 0) this._height = 1; // an emptied root is a valid empty leaf (fully padded)
+    }
+
+    /**
+     * Write the entry for `child` (its exact MBR and max key) into slot `s`. Returns false if it was already exact.
+     * @param {number} s
+     * @param {number} child
+     */
     _setEntry(s, child) {
-        const boxes = this.boxes, keys = this.keys, cb = child * M, n = this.count[child];
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, k = -0x80000000;
-        for (let i = cb; i < cb + n; i++) {
+        const boxes = this._boxes, keys = this._keys;
+        const start = child * M, end = start + this._count[child];
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxKey = -MAX_KEY - 1;
+        for (let i = start; i < end; i++) {
             const p = i * 4;
-            minX = Math.min(minX, boxes[p]);
+            minX = Math.min(minX, boxes[p]); // branchy min/max mispredicts here
             minY = Math.min(minY, boxes[p + 1]);
             maxX = Math.max(maxX, boxes[p + 2]);
             maxY = Math.max(maxY, boxes[p + 3]);
-            k = Math.max(k, keys[i]);
+            maxKey = Math.max(maxKey, keys[i]);
         }
+
+        this._ptrs[s] = child;
         const p = s * 4;
-        boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
-        keys[s] = k; this.ptrs[s] = child;
+        if (boxes[p] === minX && boxes[p + 1] === minY && boxes[p + 2] === maxX && boxes[p + 3] === maxY &&
+            keys[s] === maxKey) return false;
+
+        boxes[p] = minX;
+        boxes[p + 1] = minY;
+        boxes[p + 2] = maxX;
+        boxes[p + 3] = maxY;
+        keys[s] = maxKey;
+        return true;
     }
-    // after a child split into (a, b): rewrite a's parent entry and insert b's right after it, splitting upward
-    _register() {
-        let a = this._a, b = this._b, level = 1;
-        while (true) {
-            if (level === this.height) {
-                const r = this._alloc();
-                this._setEntry(r * M, a); this._setEntry(r * M + 1, b);
-                this.count[r] = 2; this.parent[a] = r; this.parent[b] = r;
-                this.root = r; this.height++;
-                return;
-            }
-            let s = this.path[level];
-            const p = s >> 4;
-            this._setEntry(s, a);
-            let pn = -1;
-            if (this.count[p] === M) { // internal nodes are ordered, so the upper half moves as is
-                pn = this._alloc();
-                const from = p * M + H, to = pn * M, parent = this.parent, ptrs = this.ptrs;
-                for (let i = 0; i < H; i++) { this._copy(from + i, to + i); parent[ptrs[to + i]] = pn; }
-                this._pad(from, from + H);
-                this.count[p] = H; this.count[pn] = H;
-                if ((s & 15) >= H) s = to + (s & 15) - H; // a's entry moved along
-            }
-            const host = s >> 4, end = host * M + this.count[host], at = s + 1;
-            for (let i = end; i > at; i--) this._copy(i - 1, i);
-            this._setEntry(at, b);
-            this.parent[b] = host;
-            this.count[host]++;
-            if (pn === -1) return;
-            a = p; b = pn; level++;
+
+    /**
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    _key(minX, minY, maxX, maxY) {
+        // clamp as floats before `| 0`: out-of-range values would wrap around int32
+        const x = clamp(this._scaleX * ((minX + maxX) / 2 - this._minX)) | 0;
+        const y = clamp(this._scaleY * ((minY + maxY) / 2 - this._minY)) | 0;
+        return hilbert(x, y) >> 1;
+    }
+
+    /** Take a free node or a new one from the arena (doubling it when full); returns it fully padded. */
+    _alloc() {
+        if (this._freeNodes.length > 0) return /** @type {number} */ (this._freeNodes.pop());
+
+        if (this._numNodes === this._capacity) {
+            const capacity = this._capacity *= 2;
+            this._boxes = grow(this._boxes, capacity * M * 4);
+            this._keys = grow(this._keys, capacity * M);
+            this._ptrs = grow(this._ptrs, capacity * M);
+            this._count = grow(this._count, capacity);
+            this._parent = grow(this._parent, capacity);
         }
+
+        const node = this._numNodes++;
+        this._pad(node * M, node * M + M);
+        return node;
     }
-    // take an item out of its leaf (swap-remove) and tighten the boxes above
-    _detach(id) {
-        const leaf = this.leafOf[id], base = leaf * M, last = base + --this.count[leaf], ptrs = this.ptrs;
-        let i = base;
-        while (ptrs[i] !== id) i++;
-        if (i !== last) this._copy(last, i);
-        this._pad(last, last + 1);
-        this._refit(leaf);
-    }
-    // recompute exact parent entries from `node` upward until one is unchanged; empty nodes are unlinked and freed
-    _refit(node) {
-        const parent = this.parent, count = this.count, boxes = this.boxes, keys = this.keys, ptrs = this.ptrs;
-        while (node !== this.root) {
-            const par = parent[node];
-            let s = par * M;
-            while (ptrs[s] !== node) s++;
-            if (count[node] === 0) {
-                const end = par * M + --count[par];
-                for (let i = s; i < end; i++) this._copy(i + 1, i);
-                this._pad(end, end + 1);
-                this.free.push(node);
-                node = par;
-                continue;
-            }
-            const cb = node * M * 4, n = count[node];
-            let minX = boxes[cb], minY = boxes[cb + 1], maxX = boxes[cb + 2], maxY = boxes[cb + 3];
-            for (let p = cb + 4, e = cb + M * 4; p < e; p += 4) { // unused slots are sentinels
-                minX = Math.min(minX, boxes[p]);
-                minY = Math.min(minY, boxes[p + 1]);
-                maxX = Math.max(maxX, boxes[p + 2]);
-                maxY = Math.max(maxY, boxes[p + 3]);
-            }
-            let k = keys[node * M];
-            for (let i = node * M + 1, e = node * M + n; i < e; i++) k = Math.max(k, keys[i]);
+
+    /**
+     * Fill slots [start, end) with sentinel boxes and MAX_KEY.
+     * @param {number} start
+     * @param {number} end
+     */
+    _pad(start, end) {
+        const boxes = this._boxes, keys = this._keys;
+        for (let s = start; s < end; s++) {
             const p = s * 4;
-            if (boxes[p] === minX && boxes[p + 1] === minY && boxes[p + 2] === maxX && boxes[p + 3] === maxY && keys[s] === k) return;
-            boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
-            keys[s] = k;
-            node = par;
-        }
-        if (count[node] === 0) this.height = 1; // an emptied root is a valid empty leaf (fully padded)
-    }
-    remove(id) {
-        this._detach(id);
-        this.size--;
-    }
-    update(id, minX, minY, maxX = minX, maxY = minY) {
-        const key = this._key(minX, minY, maxX, maxY);
-        const leaf = this.leafOf[id], keys = this.keys, ptrs = this.ptrs, base = leaf * M;
-        // the item can stay put if its new key is still within the key range its leaf covers
-        let stay = leaf === this.root, s = -1;
-        if (!stay) {
-            const pb = this.parent[leaf] * M;
-            s = pb;
-            while (ptrs[s] !== leaf) s++;
-            if (key <= keys[s]) {
-                if (s > pb) stay = key > keys[s - 1];
-                else { // first child: its lower bound lives further up, so settle for the leaf's own min key
-                    let min = keys[base];
-                    for (let i = base + 1, e = base + this.count[leaf]; i < e; i++) if (keys[i] < min) min = keys[i];
-                    stay = key >= min;
-                }
-            }
-        }
-        if (stay) {
-            let i = base;
-            while (ptrs[i] !== id) i++;
-            const boxes = this.boxes, p = i * 4, e = s * 4;
-            // the leaf's box and max key can only change if the item was on the border (or held the max key)
-            // before the move, or sticks out after it; otherwise nothing above needs a look
-            const inner = s >= 0 && keys[i] < keys[s] && key < keys[s] &&
-                boxes[p] > boxes[e] && boxes[p + 1] > boxes[e + 1] && boxes[p + 2] < boxes[e + 2] && boxes[p + 3] < boxes[e + 3] &&
-                minX > boxes[e] && minY > boxes[e + 1] && maxX < boxes[e + 2] && maxY < boxes[e + 3];
-            keys[i] = key;
-            boxes[p] = minX; boxes[p + 1] = minY; boxes[p + 2] = maxX; boxes[p + 3] = maxY;
-            this.inPlace++;
-            if (!inner) this._refit(leaf);
-        } else {
-            this._detach(id);
-            this._insert(id, key, minX, minY, maxX, maxY);
+            keys[s] = MAX_KEY;
+            boxes[p] = Infinity;
+            boxes[p + 1] = Infinity;
+            boxes[p + 2] = -Infinity;
+            boxes[p + 3] = -Infinity;
         }
     }
-    getBox(id) {
-        const ptrs = this.ptrs;
-        let i = this.leafOf[id] * M;
-        while (ptrs[i] !== id) i++;
-        return this.boxes.slice(i * 4, i * 4 + 4);
+
+    /**
+     * Copy slot `from` (box, key and pointer) into slot `to`.
+     * @param {number} from
+     * @param {number} to
+     */
+    _copy(from, to) {
+        const boxes = this._boxes, f = from * 4, t = to * 4;
+        this._keys[to] = this._keys[from];
+        this._ptrs[to] = this._ptrs[from];
+        boxes[t] = boxes[f];
+        boxes[t + 1] = boxes[f + 1];
+        boxes[t + 2] = boxes[f + 2];
+        boxes[t + 3] = boxes[f + 3];
     }
-    search(minX, minY, maxX, maxY) {
-        const boxes = this.boxes, ptrs = this.ptrs, results = [], stack = [];
-        let node = this.root, level = this.height - 1;
-        while (true) {
-            const base = node * (M * 4), end = base + M * 4;
-            for (let pos = base; pos < end; pos += 4) {
-                if (maxX < boxes[pos]) continue;
-                if (maxY < boxes[pos + 1]) continue;
-                if (minX > boxes[pos + 2]) continue;
-                if (minY > boxes[pos + 3]) continue;
-                const v = ptrs[pos >> 2];
-                if (level > 0) stack.push(v * 16 + level - 1);
-                else results.push(v);
-            }
-            if (stack.length === 0) break;
-            const e = /** @type {number} */ (stack.pop());
-            node = e >> 4; level = e & 15;
-        }
-        return results;
-    }
-    bytes() { return this.numNodes * (M * 32 + M * 4 + M * 4 + 1 + 4) + this.nextId * 4; }
 }
 
-function clamp(v) { return v < 0 ? 0 : v > HILBERT_MAX ? HILBERT_MAX : v; }
+/**
+ * Copy a typed array into a new one of the same type and the given length.
+ * @template {Float64Array | Int32Array | Uint32Array | Uint8Array} T
+ * @param {T} arr
+ * @param {number} length
+ * @returns {T}
+ */
+function grow(arr, length) {
+    const result = /** @type {T} */ (new /** @type {any} */ (arr.constructor)(length));
+    result.set(arr);
+    return result;
+}
 
+/** @param {number} v */
+function clamp(v) {
+    return v < 0 ? 0 : v > HILBERT_MAX ? HILBERT_MAX : v;
+}
+
+/**
+ * Fast Hilbert curve algorithm by http://threadlocalmutex.com/
+ * Ported from C++ https://github.com/rawrunprotected/hilbert_curves (public domain)
+ * @param {number} x
+ * @param {number} y
+ */
 function hilbert(x, y) {
     let a = x ^ y;
     let b = 0xFFFF ^ a;
@@ -331,8 +550,6 @@ function hilbert(x, y) {
     b = (b | (b << 2)) & 0x33333333;
     b = (b | (b << 1)) & 0x55555555;
 
-    // bias the unsigned 32-bit code into signed [-2^31, 2^31): full precision, and every key is an
-    // SMI on 64-bit V8 so the sort/merge hot path compares tagged ints, not float64 (~7% faster inserts).
-    // Monotonic, so the Hilbert ordering is unchanged. Stored in an Int32Array (see takeBlock).
-    return (((b << 1) | a) >>> 0) - 0x80000000;
+    // biased into signed int32 order: an unsigned code above 2^31 would be a heap number, ~5% slower inserts
+    return ((b << 1) | a) ^ 0x80000000;
 }
