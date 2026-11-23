@@ -21,12 +21,16 @@
 // `keys` (leaf Hilbert keys, for merging), plus `numItems` and `nodeSize`. Each tree level is
 // padded to a full nodeSize multiple (by pack(), on first search) so every node is the same width
 // and search needs no level-bound check. Separate arrays make build/merge/replacement trivial. Arrays
-// are allocated to a `capacity` size class (B·2^k ≥ numItems), so every block is recycled whole through
+// are allocated to a `capacity` size class (B·2^k ≥ numItems), so small blocks are recycled whole through
 // a pool of free lists indexed by that class (a clean slab allocator) instead of reallocated from scratch.
 // A block's pool class is independent of its cascade level (its index in `_blocks`, which keeps blocks in
 // age order): a merge output is sized by the items it actually holds, whatever level it settles at.
 
 const HILBERT_MAX = (1 << 16) - 1;
+
+// Largest block capacity kept in the pool. Class k is needed only once per 2ᵏ flushes, so pooling big blocks
+// saves nearly nothing, while freed ones would pile up to ~2× the live tree; above this they're left to GC.
+const MAX_POOLED_ITEMS = 1 << 16;
 
 /**
  * Fill a box range with sentinel boxes (+∞ min / −∞ max): never match a query, no-ops in parent MBRs.
@@ -187,11 +191,13 @@ function takeBlock(pool, numItems, nodeSize, bufferSize) {
 }
 
 /**
- * Return a relieved block to its free list for reuse by the next block of the same capacity class.
+ * Return a relieved block to its free list for reuse by the next block of the same capacity class. Blocks
+ * above MAX_POOLED_ITEMS are dropped instead, except class 0 (the buffer swap on every flush needs it).
  * @param {RBlock[][]} pool
  * @param {RBlock} block
  */
 function putBlock(pool, block) {
+    if (block.poolClass > 0 && block.keys.length > MAX_POOLED_ITEMS) return;
     const free = pool[block.poolClass];
     if (free === undefined) pool[block.poolClass] = [block];
     else free.push(block);
