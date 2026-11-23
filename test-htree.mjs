@@ -1,5 +1,5 @@
 // Seeded fuzz: random add / remove / update (jitter + teleport) against brute force, plus white-box invariants
-// (padded unused slots, leafOf and parent links, tight MBRs, exact max keys, key order).
+// (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order).
 import HTree from './htree.js';
 
 const M = 16;
@@ -41,7 +41,7 @@ function check(t, live) {
             if (level === 0) {
                 const id = ptrs[s], b = live.get(id);
                 items++;
-                if (t._leafOf[id] !== node) throw new Error('leafOf mismatch');
+                if (t._slotOf[id] !== s) throw new Error('slotOf mismatch');
                 if (!b || b[0] !== boxes[p] || b[1] !== boxes[p + 1] || b[2] !== boxes[p + 2] || b[3] !== boxes[p + 3]) throw new Error('stale or wrong box');
                 if (keys[s] < loKey) throw new Error('leaf key below its range');
 

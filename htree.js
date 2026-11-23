@@ -43,7 +43,7 @@ export default class HTree {
         this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
         this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
 
-        this._leafOf = new Uint32Array(1024);                 // id → leaf node holding it
+        this._slotOf = new Uint32Array(1024);                 // id → leaf slot holding it (leaf node = slot / M)
         this._nextId = 0;
 
         this._height = 1;
@@ -61,7 +61,7 @@ export default class HTree {
      */
     add(minX, minY, maxX = minX, maxY = minY) {
         const id = this._nextId++;
-        if (id === this._leafOf.length) this._leafOf = grow(this._leafOf, id * 2);
+        if (id === this._slotOf.length) this._slotOf = grow(this._slotOf, id * 2);
         this.size++;
         this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
         return id;
@@ -88,7 +88,7 @@ export default class HTree {
     update(id, minX, minY, maxX = minX, maxY = minY) {
         const key = this._key(minX, minY, maxX, maxY);
         const keys = this._keys, ptrs = this._ptrs;
-        const leaf = this._leafOf[id], base = leaf * M;
+        const s = this._slotOf[id], leaf = Math.floor(s / M), base = leaf * M;
 
         let stay = leaf === this._root;
         let e = -1; // the leaf's entry in its parent
@@ -114,9 +114,6 @@ export default class HTree {
             return;
         }
 
-        let s = base;
-        while (ptrs[s] !== id) s++;
-
         // the leaf's entry can only change if the item was on its border (or held its max key) before the move,
         // or sticks out after it; otherwise nothing above needs a look
         const boxes = this._boxes, p = s * 4, q = e * 4;
@@ -139,9 +136,7 @@ export default class HTree {
      * @param {number} id
      */
     getBox(id) {
-        const ptrs = this._ptrs;
-        let s = this._leafOf[id] * M;
-        while (ptrs[s] !== id) s++;
+        const s = this._slotOf[id];
         return Array.from(this._boxes.subarray(s * 4, s * 4 + 4));
     }
 
@@ -247,7 +242,7 @@ export default class HTree {
         nb[p + 1] = minY;
         nb[p + 2] = maxX;
         nb[p + 3] = maxY;
-        this._leafOf[id] = leaf;
+        this._slotOf[id] = s;
 
         // parent entries are computed once the item has landed
         if (sibling !== -1) this._addSibling(node, sibling);
@@ -261,7 +256,7 @@ export default class HTree {
      */
     _splitLeaf(leaf) {
         const sibling = this._alloc();
-        const keys = this._keys, ptrs = this._ptrs, leafOf = this._leafOf;
+        const keys = this._keys, ptrs = this._ptrs, slotOf = this._slotOf;
         const base = leaf * M;
 
         let upper = 0; // bit i set: slot i moves to the sibling
@@ -277,14 +272,15 @@ export default class HTree {
         let to = sibling * M;
         for (let i = 0; i < M; i++) {
             if ((upper & (1 << i)) === 0) continue;
+            slotOf[ptrs[base + i]] = to;
             this._copy(base + i, to++);
-            leafOf[ptrs[base + i]] = sibling;
         }
 
         // fill the holes in the lower slots with the stayers from the upper slots
         for (let i = 0, j = HALF; i < HALF; i++) {
             if ((upper & (1 << i)) === 0) continue;
             while ((upper & (1 << j)) !== 0) j++;
+            slotOf[ptrs[base + j]] = base + i;
             this._copy(base + j++, base + i);
         }
 
@@ -352,12 +348,13 @@ export default class HTree {
      * @param {number} id
      */
     _detach(id) {
-        const leaf = this._leafOf[id], ptrs = this._ptrs;
+        const s = this._slotOf[id], leaf = Math.floor(s / M);
         const last = leaf * M + --this._count[leaf];
 
-        let s = leaf * M;
-        while (ptrs[s] !== id) s++;
-        if (s !== last) this._copy(last, s);
+        if (s !== last) {
+            this._slotOf[this._ptrs[last]] = s;
+            this._copy(last, s);
+        }
         this._pad(last, last + 1);
 
         this._refit(leaf);
