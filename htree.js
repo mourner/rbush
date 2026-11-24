@@ -7,6 +7,8 @@
 // children ordered by key. Unused slots hold sentinel boxes (+∞ min / −∞ max: never match a query, no-ops in MBRs)
 // and MAX_KEY, so search scans every node at full width with no counts.
 //
+// In-place updates refit the entries above lazily, before the next search.
+//
 // Not hardened yet: ids are not reused or validated, nodes are never merged on underflow, the arena grows by
 // doubling, and the Hilbert domain is fixed at construction.
 
@@ -31,8 +33,10 @@ export default class HTree {
         const [minX, minY, maxX, maxY] = domain;
         this._minX = minX;
         this._minY = minY;
-        this._scaleX = HILBERT_MAX / ((maxX - minX) || 1); // center → [0, HILBERT_MAX] grid
-        this._scaleY = HILBERT_MAX / ((maxY - minY) || 1);
+        // center → grid cell; 2^16 cells per axis rather than 2^16 − 1, so that each half of the domain maps
+        // exactly to a half of the grid at every level (the max edge clamps into the last cell)
+        this._scaleX = (HILBERT_MAX + 1) / ((maxX - minX) || 1);
+        this._scaleY = (HILBERT_MAX + 1) / ((maxY - minY) || 1);
 
         this._capacity = initialNodes;
         this._boxes = new Float64Array(initialNodes * M * 4); // slot → item box (leaf) or child MBR (internal)
@@ -40,6 +44,11 @@ export default class HTree {
         this._ptrs = new Uint32Array(initialNodes * M);       // slot → item id (leaf) or child node (internal)
         this._count = new Uint8Array(initialNodes);           // node → used slots
         this._parent = new Uint32Array(initialNodes);         // node → parent node
+        // node → 1 + its level if its entry in the parent awaits a refit in _flush, else 0
+        this._dirty = new Uint8Array(initialNodes);
+        this._dirtyList = new Uint32Array(initialNodes);      // leaves marked in _dirty (may hold stale or repeat nodes)
+        this._numDirty = 0;
+        this._dirtyNext = new Uint32Array(initialNodes);      // _flush scratch: parents of the level being refit
         this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
         this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
 
@@ -77,8 +86,9 @@ export default class HTree {
     }
 
     /**
-     * Change an item's box, keeping its id. The item stays in its leaf if the new key is still inside the leaf's
-     * key range; otherwise it is detached and inserted again.
+     * Change an item's box, keeping its id. The item stays in its leaf if the new box fits inside the leaf's MBR
+     * (keeping its old key) or the new key is still inside the leaf's key range; otherwise it is detached and
+     * inserted again. Entries above a leaf changed in place are refit lazily, once per leaf before the next search.
      * @param {number} id
      * @param {number} minX
      * @param {number} minY
@@ -86,40 +96,45 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     update(id, minX, minY, maxX = minX, maxY = minY) {
-        const key = this._key(minX, minY, maxX, maxY);
-        const keys = this._keys, ptrs = this._ptrs;
-        const s = this._slotOf[id], leaf = Math.floor(s / M), base = leaf * M;
+        const keys = this._keys, ptrs = this._ptrs, boxes = this._boxes;
+        const s = this._slotOf[id], leaf = Math.floor(s / M), base = leaf * M, p = s * 4;
 
-        let stay = leaf === this._root;
-        let e = -1; // the leaf's entry in its parent
-        if (!stay) {
+        let key = keys[s];
+        if (leaf === this._root) {
+            key = this._key(minX, minY, maxX, maxY);
+        } else {
             const pb = this._parent[leaf] * M;
-            e = pb;
+            let e = pb; // the leaf's entry in its parent
             while (ptrs[e] !== leaf) e++;
 
-            if (key <= keys[e]) {
-                if (e > pb) {
-                    stay = key > keys[e - 1];
-                } else { // first child: its lower bound lives further up, so settle for the leaf's own min key
-                    let min = keys[base];
-                    for (let i = base + 1, end = base + this._count[leaf]; i < end; i++) min = Math.min(min, keys[i]);
-                    stay = key >= min;
+            // a box that fits inside the leaf's MBR stays with its old key: placement only needs a key inside the
+            // leaf's range, not the key of the current box (a marked leaf's MBR may be stale, which only costs quality)
+            const q = e * 4;
+            let stay = minX >= boxes[q] && minY >= boxes[q + 1] && maxX <= boxes[q + 2] && maxY <= boxes[q + 3];
+
+            if (!stay) {
+                key = this._key(minX, minY, maxX, maxY);
+                if (key <= keys[e]) {
+                    if (e > pb) {
+                        stay = key > keys[e - 1];
+                    } else { // first child: its lower bound lives further up, so settle for the leaf's own min key
+                        let min = keys[base];
+                        for (let i = base + 1, end = base + this._count[leaf]; i < end; i++) min = Math.min(min, keys[i]);
+                        stay = key >= min;
+                    }
+                }
+                if (!stay) {
+                    this._detach(id);
+                    this._insert(id, key, minX, minY, maxX, maxY);
+                    return;
                 }
             }
+            if (this._dirty[leaf] === 0) {
+                this._dirty[leaf] = 1;
+                if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
+                this._dirtyList[this._numDirty++] = leaf;
+            }
         }
-
-        if (!stay) {
-            this._detach(id);
-            this._insert(id, key, minX, minY, maxX, maxY);
-            return;
-        }
-
-        // the leaf's entry can only change if the item was on its border (or held its max key) before the move,
-        // or sticks out after it; otherwise nothing above needs a look
-        const boxes = this._boxes, p = s * 4, q = e * 4;
-        const inner = e >= 0 && keys[s] < keys[e] && key < keys[e] &&
-            boxes[p] > boxes[q] && boxes[p + 1] > boxes[q + 1] && boxes[p + 2] < boxes[q + 2] && boxes[p + 3] < boxes[q + 3] &&
-            minX > boxes[q] && minY > boxes[q + 1] && maxX < boxes[q + 2] && maxY < boxes[q + 3];
 
         keys[s] = key;
         boxes[p] = minX;
@@ -127,8 +142,6 @@ export default class HTree {
         boxes[p + 2] = maxX;
         boxes[p + 3] = maxY;
         this.inPlace++;
-
-        if (!inner) this._refit(leaf);
     }
 
     /**
@@ -153,6 +166,8 @@ export default class HTree {
         minY = Math.max(minY, -Number.MAX_VALUE);
         maxX = Math.min(maxX, Number.MAX_VALUE);
         maxY = Math.min(maxY, Number.MAX_VALUE);
+
+        if (this._numDirty > 0) this._flush();
 
         const boxes = this._boxes, ptrs = this._ptrs;
         const results = [], queue = [];
@@ -344,6 +359,52 @@ export default class HTree {
     }
 
     /**
+     * Refit the entries of leaves marked by in-place updates, then the entries of all their ancestors, level by
+     * level, each node once.
+     *
+     * Between flushes the entries above a marked leaf may be stale: its box can be too small or too large and its
+     * max key too high (keys stay inside the leaf's range, so a stale max key is still a valid separator). Other
+     * writes keep working on such a tree: insert only grows entries, and remove and split compute entries exactly
+     * from the children below. Those exact writes can leave an ancestor stale without leaving the leaf's own entry
+     * stale (a split recomputes the leaf's entry but not the entries above its parent), which is why every
+     * ancestor is refit here, changed or not.
+     */
+    _flush() {
+        const dirty = this._dirty, parent = this._parent, ptrs = this._ptrs;
+        let list = this._dirtyList, next = this._dirtyNext, n = this._numDirty;
+
+        // a list entry counts only if the node's mark matches the level: freed nodes are unmarked in _refit, and a
+        // freed leaf may come back as an internal node that is marked at its own level
+        for (let mark = 1; n > 0; mark++) {
+            let m = 0;
+            for (let i = 0; i < n; i++) {
+                const node = list[i];
+                if (dirty[node] !== mark) continue;
+                dirty[node] = 0;
+                if (node === this._root) continue;
+
+                const p = parent[node];
+                let s = p * M;
+                while (ptrs[s] !== node) s++;
+                this._setEntry(s, node);
+
+                if (dirty[p] === 0) {
+                    dirty[p] = mark + 1;
+                    if (m === next.length) next = grow(next, m * 2);
+                    next[m++] = p;
+                }
+            }
+            const tmp = list;
+            list = next;
+            next = tmp;
+            n = m;
+        }
+        this._dirtyList = list;
+        this._dirtyNext = next;
+        this._numDirty = 0;
+    }
+
+    /**
      * Take an item out of its leaf (swap-remove) and tighten the entries above.
      * @param {number} id
      */
@@ -378,6 +439,7 @@ export default class HTree {
                 for (let i = s; i < last; i++) this._copy(i + 1, i);
                 this._pad(last, last + 1);
                 this._freeNodes.push(node);
+                this._dirty[node] = 0;
 
             } else if (!this._setEntry(s, node)) {
                 return;
@@ -444,6 +506,7 @@ export default class HTree {
             this._ptrs = grow(this._ptrs, capacity * M);
             this._count = grow(this._count, capacity);
             this._parent = grow(this._parent, capacity);
+            this._dirty = grow(this._dirty, capacity);
         }
 
         const node = this._numNodes++;

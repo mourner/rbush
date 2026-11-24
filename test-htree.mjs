@@ -1,5 +1,6 @@
 // Seeded fuzz: random add / remove / update (jitter + teleport) against brute force, plus white-box invariants
-// (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order).
+// (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order). Before a lazy refit,
+// entries above leaves updated in place may be stale, but max keys must still be upper bounds and in order.
 import HTree from './htree.js';
 
 const M = 16;
@@ -19,8 +20,9 @@ function mulberry32(a) {
 /**
  * @param {any} t
  * @param {Map<number, number[]>} live
+ * @param {boolean} exact false: allow entries left stale by pending in-place updates
  */
-function check(t, live) {
+function check(t, live, exact) {
     const boxes = t._boxes, keys = t._keys, ptrs = t._ptrs;
     let items = 0;
 
@@ -49,8 +51,8 @@ function check(t, live) {
                 const child = ptrs[s];
                 if (t._parent[child] !== node) throw new Error('parent mismatch');
                 const r = visit(child, level - 1, prev);
-                if (r[0] !== boxes[p] || r[1] !== boxes[p + 1] || r[2] !== boxes[p + 2] || r[3] !== boxes[p + 3]) throw new Error('MBR not tight');
-                if (r[4] !== keys[s]) throw new Error('max key mismatch');
+                if (exact && (r[0] !== boxes[p] || r[1] !== boxes[p + 1] || r[2] !== boxes[p + 2] || r[3] !== boxes[p + 3])) throw new Error('MBR not tight');
+                if (exact ? r[4] !== keys[s] : r[4] > keys[s]) throw new Error('max key mismatch');
                 if (keys[s] < prev) throw new Error('child keys out of order');
                 prev = keys[s];
             }
@@ -66,6 +68,11 @@ function check(t, live) {
 
     visit(t._root, t._height - 1, -Infinity);
     if (items !== live.size) throw new Error(`item count ${items} vs ${live.size}`);
+
+    if (exact) {
+        if (t._numDirty !== 0) throw new Error('dirty list not empty');
+        for (let i = 0; i < t._numNodes; i++) if (t._dirty[i] !== 0) throw new Error('node left dirty');
+    }
 }
 
 for (let seed = 1; seed <= 12; seed++) {
@@ -122,7 +129,9 @@ for (let seed = 1; seed <= 12; seed++) {
 
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
-        check(t, live);
+        check(t, live, false);
+        t._flush();
+        check(t, live, true);
 
         // query 0 is infinite on both sides, 1 is small, 2–3 are large
         for (let q = 0; q < 4; q++) {
@@ -151,7 +160,8 @@ for (let seed = 1; seed <= 12; seed++) {
         t.remove(id);
         live.delete(id);
     }
-    check(t, live);
+    t._flush();
+    check(t, live, true);
     if (t.search(-Infinity, -Infinity, Infinity, Infinity).length !== 0) throw new Error('not empty');
 
     console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; peak nodes ${t._numNodes}, in-place updates ${t.inPlace})`);
