@@ -124,16 +124,15 @@ export default class HTree {
                     }
                 }
                 if (!stay) {
-                    this._detach(id);
+                    // the entries above may stay too large until the flush; an emptied leaf is unlinked at once
+                    this._take(s);
+                    if (this._count[leaf] === 0) this._refit(leaf);
+                    else this._mark(leaf);
                     this._insert(id, key, minX, minY, maxX, maxY);
                     return;
                 }
             }
-            if (this._dirty[leaf] === 0) {
-                this._dirty[leaf] = 1;
-                if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
-                this._dirtyList[this._numDirty++] = leaf;
-            }
+            this._mark(leaf);
         }
 
         keys[s] = key;
@@ -359,8 +358,8 @@ export default class HTree {
     }
 
     /**
-     * Refit the entries of leaves marked by in-place updates, then the entries of all their ancestors, level by
-     * level, each node once.
+     * Refit the entries of leaves marked by updates (in place, or moving an item out), then the entries of all their
+     * ancestors, level by level, each node once.
      *
      * Between flushes the entries above a marked leaf may be stale: its box can be too small or too large and its
      * max key too high (keys stay inside the leaf's range, so a stale max key is still a valid separator). Other
@@ -374,11 +373,14 @@ export default class HTree {
         let list = this._dirtyList, next = this._dirtyNext, n = this._numDirty;
 
         // a list entry counts only if the node's mark matches the level: freed nodes are unmarked in _refit, and a
-        // freed leaf may come back as an internal node that is marked at its own level
+        // freed leaf may come back as an internal node that is marked at its own level; a long list is replaced by a
+        // sweep of the arena, which visits the same nodes in memory order instead of random order
         for (let mark = 1; n > 0; mark++) {
+            const sweep = n * 8 > this._numNodes;
+            const end = sweep ? this._numNodes : n;
             let m = 0;
-            for (let i = 0; i < n; i++) {
-                const node = list[i];
+            for (let i = 0; i < end; i++) {
+                const node = sweep ? i : list[i];
                 if (dirty[node] !== mark) continue;
                 dirty[node] = 0;
                 if (node === this._root) continue;
@@ -409,16 +411,34 @@ export default class HTree {
      * @param {number} id
      */
     _detach(id) {
-        const s = this._slotOf[id], leaf = Math.floor(s / M);
-        const last = leaf * M + --this._count[leaf];
+        const s = this._slotOf[id];
+        this._take(s);
+        this._refit(Math.floor(s / M));
+    }
 
+    /**
+     * Swap-remove the item in leaf slot `s`, leaving the entries above as they are.
+     * @param {number} s
+     */
+    _take(s) {
+        const leaf = Math.floor(s / M);
+        const last = leaf * M + --this._count[leaf];
         if (s !== last) {
             this._slotOf[this._ptrs[last]] = s;
             this._copy(last, s);
         }
         this._pad(last, last + 1);
+    }
 
-        this._refit(leaf);
+    /**
+     * Mark a leaf for _flush to refit its entry and those above.
+     * @param {number} leaf
+     */
+    _mark(leaf) {
+        if (this._dirty[leaf] !== 0) return;
+        this._dirty[leaf] = 1;
+        if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
+        this._dirtyList[this._numDirty++] = leaf;
     }
 
     /**
