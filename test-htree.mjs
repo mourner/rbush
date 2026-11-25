@@ -1,7 +1,8 @@
 // Seeded fuzz: random add / remove / update (jitter + teleport) against brute force, plus white-box invariants
 // (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order). Before a lazy refit,
 // entries above leaves updated in place may be stale, but max keys must still be upper bounds and in order.
-// rebuild() runs at random points, and over a range of sizes around node and sort-path boundaries.
+// rebuild() runs at random points, and over a range of sizes around node and sort-path boundaries. Pending mode
+// (automatic while empty, or by toggle) runs stretches of writes that the next search packs.
 import HTree from './htree.js';
 
 const M = 16;
@@ -33,7 +34,7 @@ function check(t, live, exact, packed = false) {
     // returns the node's actual [minX, minY, maxX, maxY, maxKey]
     const visit = (node, level, loKey) => {
         const n = t._count[node];
-        if (node !== t._root && n === 0) throw new Error('empty non-root node');
+        if (node !== t._root && n === 0 && !t._pending) throw new Error('empty non-root node');
         if (packed && n > FILL && node !== t._root) throw new Error('packed node over FILL');
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxKey = -Infinity, prev = loKey;
@@ -73,13 +74,24 @@ function check(t, live, exact, packed = false) {
     };
 
     visit(t._root, t._height - 1, -Infinity);
+    if (!t._pending && t._numPending !== 0) throw new Error('pending items outside pending mode');
+    if (t._pending && t._pendingStart < t._numNodes) throw new Error('pending slots overlap nodes');
+    for (let s = t._pendingStart * M, end = s + t._numPending; s < end; s++) {
+        const id = ptrs[s], b = live.get(id), p = s * 4;
+        items++;
+        if (t._slotOf[id] !== s) throw new Error('pending slotOf mismatch');
+        if (!b || b[0] !== boxes[p] || b[1] !== boxes[p + 1] || b[2] !== boxes[p + 2] || b[3] !== boxes[p + 3]) throw new Error('wrong pending box');
+    }
     if (items !== live.size) throw new Error(`item count ${items} vs ${live.size}`);
     if (t.size !== live.size) throw new Error(`size ${t.size} vs ${live.size}`);
     for (let id = 0; id < t._nextId; id++) {
         if (!live.has(id) && t._slotOf[id] !== DEAD) throw new Error('removed id not marked dead');
     }
 
+    if (t.size === 0 && (!t._pending || t._height !== 1 || t._count[t._root] !== 0)) throw new Error('empty tree not reset');
+
     if (exact) {
+        if (t._pending) throw new Error('exact check in pending mode');
         if (t._numDirty !== 0) throw new Error('dirty list not empty');
         for (let i = 0; i < t._numNodes; i++) if (t._dirty[i] !== 0) throw new Error('node left dirty');
     }
@@ -92,7 +104,7 @@ for (let seed = 1; seed <= 12; seed++) {
     const ids = [];
     const clustered = seed % 3 === 0;
     const ops = 12000;
-    let rebuilds = 0;
+    let rebuilds = 0, toggles = 0;
 
     // some boxes fall outside the domain
     const box = () => {
@@ -140,15 +152,22 @@ for (let seed = 1; seed <= 12; seed++) {
 
         if (rnd() < 1 / 700) { // with in-place updates likely pending
             t.rebuild();
-            check(t, live, true, true);
+            check(t, live, t.size > 0, t.size > 0);
             rebuilds++;
+        }
+        if (rnd() < 1 / 400 && !t._pending) {
+            t._enterPending();
+            toggles++;
         }
 
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
         check(t, live, false);
-        t._flush();
-        check(t, live, true);
+        const packs = t._pending && t.size > 0;
+        if (!t._pending) {
+            t._flush();
+            check(t, live, true);
+        }
 
         // query 0 is infinite on both sides, 1 is small, 2–3 are large
         for (let q = 0; q < 4; q++) {
@@ -169,6 +188,7 @@ for (let seed = 1; seed <= 12; seed++) {
             if (got.length !== expected.length || got.some((v, j) => v !== expected[j])) {
                 throw new Error(`search mismatch seed ${seed} op ${op}: ${got.length} vs ${expected.length}`);
             }
+            if (q === 0 && packs) check(t, live, true, true);
         }
     }
 
@@ -177,23 +197,20 @@ for (let seed = 1; seed <= 12; seed++) {
         t.remove(id);
         live.delete(id);
     }
-    t._flush();
-    check(t, live, true);
+    check(t, live, false); // emptied: back in pending mode with a clean root
     if (t.search(-Infinity, -Infinity, Infinity, Infinity).length !== 0) throw new Error('not empty');
-
-    const peak = t._numNodes;
     t.rebuild();
-    check(t, live, true, true);
+    check(t, live, false);
 
-    console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; peak nodes ${peak}, ` +
-        `in-place updates ${t.inPlace}, rebuilds ${rebuilds})`);
+    console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; ` +
+        `in-place updates ${t.inPlace}, rebuilds ${rebuilds}, pending toggles ${toggles})`);
 }
 
 // rebuild at sizes around one leaf, one full internal level and the radix threshold, after removes and with
 // in-place updates pending, then keep going on the packed tree
 for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 8192, 8193, 20000]) {
     const rnd = mulberry32(n + 1);
-    const t = new HTree([0, 0, 1000, 1000]);
+    const t = new HTree([0, 0, 1000, 1000], n % 2 ? n : 0);
     const live = new Map();
     const box = () => {
         const x = rnd() * 1000, y = rnd() * 1000;
@@ -208,7 +225,7 @@ for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 81
         if (got.length !== expected.length || got.some((v, j) => v !== expected[j])) throw new Error(`search mismatch at n ${n}`);
     };
 
-    // n + 10% adds, then remove that many, so that some ids are dead
+    // n + 10% adds, then remove that many, so that some ids are dead; all of it pending (bulk build)
     const extra = Math.ceil(n / 10);
     for (let i = 0; i < n + extra; i++) {
         const b = box();
@@ -226,10 +243,11 @@ for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 81
         live.set(id, b);
     }
 
+    check(t, live, false);
     t.rebuild();
-    check(t, live, true, true);
+    check(t, live, n > 0, n > 0);
     t.rebuild(); // twice in a row, from a packed tree
-    check(t, live, true, true);
+    check(t, live, n > 0, n > 0);
     for (let q = 0; q < 20; q++) query();
 
     for (let i = 0; i < 2000; i++) {
@@ -242,17 +260,21 @@ for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 81
             t.remove(id);
             live.delete(id);
         } else {
-            const id = ids[Math.floor(rnd() * ids.length)], b = box();
+            const id = ids[Math.floor(rnd() * ids.length)], b = rnd() < 0.5 ? box() : live.get(id).map(v => v + rnd() - 0.5);
             t.update(id, b[0], b[1], b[2], b[3]);
             live.set(id, b);
+            const g = t.getBox(id);
+            if (g.some((v, j) => v !== b[j])) throw new Error('getBox mismatch');
         }
+        if (i === 500 || i === 1500) t._enterPending(); // churn leaf and pending items alike, packed by a search
         if (i === 1000) {
-            t.rebuild();
-            check(t, live, true, true);
+            check(t, live, false);
+            query();
+            check(t, live, t.size > 0, t.size > 0);
         }
     }
-    t._flush();
-    check(t, live, true);
+    check(t, live, false);
     for (let q = 0; q < 20; q++) query();
+    if (t.size > 0) check(t, live, true);
 }
 console.log('rebuild sizes ok');

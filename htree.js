@@ -7,7 +7,9 @@
 // children ordered by key. Unused slots hold sentinel boxes (+∞ min / −∞ max: never match a query, no-ops in MBRs)
 // and MAX_KEY, so search scans every node at full width with no counts.
 //
-// In-place updates refit the entries above lazily, before the next search.
+// In-place updates refit the entries above lazily, before the next search. While the tree is empty, and in
+// pending mode generally, writes skip the tree: adds go to a run of slots past the last node, updates only rewrite
+// the box, and the next search packs everything with rebuild.
 //
 // Not hardened yet: ids are not reused or validated, nodes are never merged on underflow, the arena grows by
 // doubling, and the Hilbert domain is fixed at construction.
@@ -32,9 +34,10 @@ let radixCounts; // shared by all trees: 2^16 counts for the low key digit, 2^15
 export default class HTree {
     /**
      * @param {[number, number, number, number]} [domain] Coordinate bounds [minX, minY, maxX, maxY] for the Hilbert grid.
-     * @param {number} [initialNodes=64] Initial arena capacity in nodes.
+     * @param {number} [capacity=0] Number of items to reserve room for (see reserve).
      */
-    constructor(domain = [0, 0, 1, 1], initialNodes = 64) {
+    constructor(domain = [0, 0, 1, 1], capacity = 0) {
+        const initialNodes = Math.max(64, packedNodes(capacity));
         this.size = 0;                                   // number of live items
         this.inPlace = 0;                                // stats: updates that kept the item in its leaf
 
@@ -60,7 +63,7 @@ export default class HTree {
         this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
         this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
 
-        this._slotOf = new Uint32Array(1024);                 // id → leaf slot holding it (leaf node = slot / M), or DEAD
+        this._slotOf = new Uint32Array(Math.max(1024, capacity)); // id → slot holding it (leaf or pending), or DEAD
         this._nextId = 0;
         this._scratch = new ArrayBuffer(0);                   // rebuild: sort pairs and radix buffer, kept between calls
 
@@ -68,6 +71,12 @@ export default class HTree {
         this._path = new Uint32Array(16);                     // level → slot taken by the last _insert descent
         this._splitKey = 0;                                   // largest key left in the lower half by _splitLeaf
         this._root = this._alloc();
+
+        // pending mode: pending items fill slots from node _pendingStart on, which stays past every allocated node
+        this._pending = false;
+        this._pendingStart = 0;
+        this._numPending = 0;
+        this._enterPending();
     }
 
     /**
@@ -81,7 +90,8 @@ export default class HTree {
         const id = this._nextId++;
         if (id === this._slotOf.length) this._slotOf = grow(this._slotOf, id * 2);
         this.size++;
-        this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
+        if (this._pending) this._append(id, minX, minY, maxX, maxY);
+        else this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
         return id;
     }
 
@@ -90,11 +100,21 @@ export default class HTree {
      * @param {number} id
      */
     remove(id) {
-        const s = this._slotOf[id];
-        this._take(s);
-        this._refit(Math.floor(s / M));
-        this._slotOf[id] = DEAD;
-        this.size--;
+        const slotOf = this._slotOf, s = slotOf[id];
+        if (!this._pending) {
+            this._take(s);
+            this._refit(Math.floor(s / M));
+        } else if (s >= this._pendingStart * M) { // a pending item: the last pending one takes its slot
+            const last = this._pendingStart * M + --this._numPending;
+            if (s !== last) {
+                slotOf[this._ptrs[last]] = s;
+                this._copy(last, s);
+            }
+        } else {
+            this._take(s); // the pack walks leaves by count and rewrites every entry
+        }
+        slotOf[id] = DEAD;
+        if (--this.size === 0) this.rebuild(); // back to a clean empty root in pending mode
     }
 
     /**
@@ -108,8 +128,28 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     update(id, minX, minY, maxX = minX, maxY = minY) {
+        if (!this._pending) {
+            this._update(id, minX, minY, maxX, maxY);
+            return;
+        }
+        const boxes = this._boxes, p = this._slotOf[id] * 4; // the pack re-keys from the box, wherever the item is
+        boxes[p] = minX;
+        boxes[p + 1] = minY;
+        boxes[p + 2] = maxX;
+        boxes[p + 3] = maxY;
+    }
+
+    /**
+     * @param {number} id
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    _update(id, minX, minY, maxX, maxY) {
         const keys = this._keys, boxes = this._boxes;
-        const s = this._slotOf[id], leaf = Math.floor(s / M), base = leaf * M, p = s * 4;
+        const s = this._slotOf[id], p = s * 4;
+        const leaf = Math.floor(s / M), base = leaf * M;
 
         let key = keys[s];
         if (leaf === this._root) {
@@ -176,7 +216,8 @@ export default class HTree {
         maxX = Math.min(maxX, Number.MAX_VALUE);
         maxY = Math.min(maxY, Number.MAX_VALUE);
 
-        if (this._numDirty > 0) this._flush();
+        if (this._pending && this.size > 0) this.rebuild();
+        else if (this._numDirty > 0) this._flush();
 
         const boxes = this._boxes, ptrs = this._ptrs;
         const results = [], queue = [];
@@ -209,17 +250,18 @@ export default class HTree {
     /**
      * Rewrite the tree packed in key order, with items re-keyed from their current boxes: leaves and internal nodes
      * FILL / M full, laid out level by level from the start of the arena. Use it after a frame where most items
-     * moved, or to restore fill and locality after heavy churn.
+     * moved, or to restore fill and locality after heavy churn. Also packs pending items, ending pending mode
+     * unless the tree is empty.
      */
     rebuild() {
         const n = this.size, slotOf = this._slotOf;
 
         // scratch: (key, source slot) pairs and the radix buffer for them; after the sort, the sorted ids take the
-        // place of the keys and the radix buffer holds one box column at a time
-        if (this._scratch.byteLength < n * 16) this._scratch = new ArrayBuffer(n * 16);
+        // place of the keys and the radix buffer (grown to 16 bytes per item) holds two box columns at a time
+        if (this._scratch.byteLength < n * 24) this._scratch = new ArrayBuffer(n * 24);
         const buf = this._scratch;
         const sortKeys = new Int32Array(buf, 0, n), from = new Uint32Array(buf, n * 4, n);
-        const ids = new Uint32Array(buf, 0, n), col = new Float64Array(buf, n * 8, n);
+        const ids = new Uint32Array(buf, 0, n), cols = new Float64Array(buf, n * 8, n * 2);
 
         // walk the leaves rather than the ids: one cache miss per leaf instead of one per item
         let boxes = this._boxes, m = 0;
@@ -237,20 +279,20 @@ export default class HTree {
                 from[m] = s;
             }
         }
+        for (let s = this._pendingStart * M, end = s + this._numPending; s < end; s++, m++) {
+            const p = s * 4;
+            sortKeys[m] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
+            from[m] = s;
+        }
         if (n >= RADIX_MIN) {
             radixSort(sortKeys, from, new Int32Array(buf, n * 8, n), new Uint32Array(buf, n * 12, n), n);
         } else {
             quickSort(sortKeys, from, 0, n - 1);
         }
 
-        // node counts per level, leaves first; n ≤ M fits one leaf, which is then the root
-        const numLeaves = n <= M ? 1 : Math.ceil(n / FILL);
-        let total = numLeaves;
-        for (let k = numLeaves; k > 1;) {
-            k = k <= M ? 1 : Math.ceil(k / FILL);
-            total += k;
-        }
-        while (this._capacity < total) this._growArena();
+        // n ≤ M fits one leaf, which is then the root
+        const numLeaves = n <= M ? 1 : Math.ceil(n / FILL), total = packedNodes(n);
+        if (this._capacity < total) this._growArena(total); // exact: packed nodes leave room for inserts
 
         const keys = this._keys, ptrs = this._ptrs, count = this._count, parent = this._parent;
         boxes = this._boxes;
@@ -264,11 +306,20 @@ export default class HTree {
                 ids[j] = ptrs[from[j]];
             }
         }
-        for (let c = 0; c < 4; c++) {
-            for (let j = 0; j < n; j++) col[j] = boxes[from[j] * 4 + c];
+        // two columns per pass: a gathered box is one cache miss whether 8 or 16 bytes of it are read, and all four
+        // would double the scratch for little more
+        for (let c = 0; c < 4; c += 2) {
+            for (let j = 0; j < n; j++) {
+                const f = from[j] * 4 + c;
+                cols[2 * j] = boxes[f];
+                cols[2 * j + 1] = boxes[f + 1];
+            }
             for (let i = 0, j = 0; i < numLeaves; i++) {
                 const end = Math.floor((i + 1) * n / numLeaves);
-                for (let p = i * M * 4 + c; j < end; j++, p += 4) boxes[p] = col[j];
+                for (let p = i * M * 4 + c; j < end; j++, p += 4) {
+                    boxes[p] = cols[2 * j];
+                    boxes[p + 1] = cols[2 * j + 1];
+                }
             }
         }
         for (let i = 0, j = 0; i < numLeaves; i++) {
@@ -306,11 +357,54 @@ export default class HTree {
         this._freeNodes.length = 0;
         this._root = lo;
         this._height = height;
+
+        this._pending = false;
+        this._numPending = 0;
+        if (n === 0) this._enterPending();
+    }
+
+    /**
+     * Make room for `n` items in total without growing the arena or the id map again, in the space a packed tree
+     * of `n` items takes. Use it before a large batch of adds.
+     * @param {number} n
+     */
+    reserve(n) {
+        const nodes = packedNodes(n), ids = this._nextId + n - this.size;
+        if (this._capacity < nodes) this._growArena(nodes);
+        if (this._slotOf.length < ids) this._slotOf = grow(this._slotOf, ids);
     }
 
     /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
     bytes() {
-        return this._numNodes * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
+        return (this._numNodes + Math.ceil(this._numPending / M)) * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
+    }
+
+    /** Switch to pending mode: until the next search or rebuild, writes skip the tree (see add, update, remove). */
+    _enterPending() {
+        if (this._pending) return;
+        this._pending = true;
+        this._pendingStart = this._numNodes;
+        this._numPending = 0;
+    }
+
+    /**
+     * Put an item in the next pending slot.
+     * @param {number} id
+     * @param {number} minX
+     * @param {number} minY
+     * @param {number} maxX
+     * @param {number} maxY
+     */
+    _append(id, minX, minY, maxX, maxY) {
+        const s = this._pendingStart * M + this._numPending++;
+        if (s === this._capacity * M) this._growArena();
+        const p = s * 4, boxes = this._boxes;
+        this._ptrs[s] = id;
+        boxes[p] = minX;
+        boxes[p + 1] = minY;
+        boxes[p + 2] = maxX;
+        boxes[p + 3] = maxY;
+        this._slotOf[id] = s;
     }
 
     /**
@@ -635,9 +729,12 @@ export default class HTree {
         return node;
     }
 
-    /** Double the arena's node capacity. */
-    _growArena() {
-        const capacity = this._capacity *= 2;
+    /**
+     * Grow the arena's node capacity (doubling by default).
+     * @param {number} [capacity]
+     */
+    _growArena(capacity = this._capacity * 2) {
+        this._capacity = capacity;
         this._boxes = grow(this._boxes, capacity * M * 4);
         this._keys = grow(this._keys, capacity * M);
         this._ptrs = grow(this._ptrs, capacity * M);
@@ -677,6 +774,19 @@ export default class HTree {
         boxes[t + 2] = boxes[f + 2];
         boxes[t + 3] = boxes[f + 3];
     }
+}
+
+/**
+ * Nodes in a tree of n items packed by rebuild: leaves and internal levels FILL full, a single node once ≤ M fit.
+ * @param {number} n
+ */
+function packedNodes(n) {
+    let k = n <= M ? 1 : Math.ceil(n / FILL), total = k;
+    while (k > 1) {
+        k = k <= M ? 1 : Math.ceil(k / FILL);
+        total += k;
+    }
+    return total;
 }
 
 /**
