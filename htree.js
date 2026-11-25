@@ -90,7 +90,9 @@ export default class HTree {
      * @param {number} id
      */
     remove(id) {
-        this._detach(id);
+        const s = this._slotOf[id];
+        this._take(s);
+        this._refit(Math.floor(s / M));
         this._slotOf[id] = DEAD;
         this.size--;
     }
@@ -106,16 +108,14 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     update(id, minX, minY, maxX = minX, maxY = minY) {
-        const keys = this._keys, ptrs = this._ptrs, boxes = this._boxes;
+        const keys = this._keys, boxes = this._boxes;
         const s = this._slotOf[id], leaf = Math.floor(s / M), base = leaf * M, p = s * 4;
 
         let key = keys[s];
         if (leaf === this._root) {
             key = this._key(minX, minY, maxX, maxY);
         } else {
-            const pb = this._parent[leaf] * M;
-            let e = pb; // the leaf's entry in its parent
-            while (ptrs[e] !== leaf) e++;
+            const e = this._entryOf(leaf);
 
             // a box that fits inside the leaf's MBR stays with its old key: placement only needs a key inside the
             // leaf's range, not the key of the current box (a marked leaf's MBR may be stale, which only costs quality)
@@ -125,7 +125,7 @@ export default class HTree {
             if (!stay) {
                 key = this._key(minX, minY, maxX, maxY);
                 if (key <= keys[e]) {
-                    if (e > pb) {
+                    if (e % M !== 0) {
                         stay = key > keys[e - 1];
                     } else { // first child: its lower bound lives further up, so settle for the leaf's own min key
                         let min = keys[base];
@@ -481,7 +481,7 @@ export default class HTree {
      * ancestor is refit here, changed or not.
      */
     _flush() {
-        const dirty = this._dirty, parent = this._parent, ptrs = this._ptrs;
+        const dirty = this._dirty, parent = this._parent;
         let list = this._dirtyList, next = this._dirtyNext, n = this._numDirty;
 
         // a list entry counts only if the node's mark matches the level: freed nodes are unmarked in _refit, and a
@@ -498,9 +498,7 @@ export default class HTree {
                 if (node === this._root) continue;
 
                 const p = parent[node];
-                let s = p * M;
-                while (ptrs[s] !== node) s++;
-                this._setEntry(s, node);
+                this._setEntry(this._entryOf(node), node);
 
                 if (dirty[p] === 0) {
                     dirty[p] = mark + 1;
@@ -516,16 +514,6 @@ export default class HTree {
         this._dirtyList = list;
         this._dirtyNext = next;
         this._numDirty = 0;
-    }
-
-    /**
-     * Take an item out of its leaf (swap-remove) and tighten the entries above.
-     * @param {number} id
-     */
-    _detach(id) {
-        const s = this._slotOf[id];
-        this._take(s);
-        this._refit(Math.floor(s / M));
     }
 
     /**
@@ -559,12 +547,10 @@ export default class HTree {
      * @param {number} node
      */
     _refit(node) {
-        const parent = this._parent, count = this._count, ptrs = this._ptrs;
+        const parent = this._parent, count = this._count;
 
         while (node !== this._root) {
-            const p = parent[node];
-            let s = p * M;
-            while (ptrs[s] !== node) s++;
+            const p = parent[node], s = this._entryOf(node);
 
             if (count[node] === 0) {
                 const last = p * M + --count[p];
@@ -580,6 +566,17 @@ export default class HTree {
         }
 
         if (count[node] === 0) this._height = 1; // an emptied root is a valid empty leaf (fully padded)
+    }
+
+    /**
+     * The slot of `node`'s entry in its parent (a linear scan: parents don't track their children's positions).
+     * @param {number} node
+     */
+    _entryOf(node) {
+        const ptrs = this._ptrs;
+        let s = this._parent[node] * M;
+        while (ptrs[s] !== node) s++;
+        return s;
     }
 
     /**
