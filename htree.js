@@ -11,8 +11,8 @@
 // pending mode generally, writes skip the tree: adds go to a run of slots past the last node, updates only rewrite
 // the box, and the next search packs everything with rebuild.
 //
-// Not hardened yet: ids are not reused or validated, nodes are never merged on underflow, the arena grows by
-// doubling, and the Hilbert domain is fixed at construction.
+// Not hardened yet: ids are not reused or validated, internal nodes are never merged on underflow, the arena grows
+// by doubling, and the Hilbert domain is fixed at construction.
 
 const M = 16;     // slots per node; the child pick in _insert is unrolled for this value
 const HALF = M / 2;
@@ -26,6 +26,8 @@ const MAX_KEY = 0x3fffffff;
 const DEAD = 0xffffffff; // slotOf value of a removed id
 
 const FILL = 14;         // items per leaf and children per internal node written by rebuild, so inserts don't split at once
+const MERGE_BELOW = HALF; // a leaf left with fewer items merges into a neighbor...
+const MERGE_MAX = FILL;   // ...if the two hold at most this many
 const RADIX_MIN = 8192;  // below this, filling the radix count table costs more than a quicksort
 
 /** @type {Uint32Array | undefined} */
@@ -102,8 +104,9 @@ export default class HTree {
     remove(id) {
         const slotOf = this._slotOf, s = slotOf[id];
         if (!this._pending) {
+            const leaf = Math.floor(s / M);
             this._take(s);
-            this._refit(Math.floor(s / M));
+            if (this._count[leaf] >= MERGE_BELOW || !this._merge(leaf)) this._refit(leaf);
         } else if (s >= this._pendingStart * M) { // a pending item: the last pending one takes its slot
             const last = this._pendingStart * M + --this._numPending;
             if (s !== last) {
@@ -176,8 +179,9 @@ export default class HTree {
                 if (!stay) {
                     // the entries above may stay too large until the flush; an emptied leaf is unlinked at once
                     this._take(s);
-                    if (this._count[leaf] === 0) this._refit(leaf);
-                    else this._mark(leaf);
+                    const n = this._count[leaf];
+                    if (n === 0) this._refit(leaf);
+                    else if (n >= MERGE_BELOW || !this._merge(leaf)) this._mark(leaf);
                     this._insert(id, key, minX, minY, maxX, maxY);
                     return;
                 }
@@ -358,6 +362,9 @@ export default class HTree {
         this._root = lo;
         this._height = height;
 
+        // after a bulk build (nothing was in the leaves), free the scratch: a tree that is rebuilt or packed again
+        // gets it back on the next pack and keeps it from then on
+        if (this._numPending === n) this._scratch = new ArrayBuffer(0);
         this._pending = false;
         this._numPending = 0;
         if (n === 0) this._enterPending();
@@ -622,6 +629,40 @@ export default class HTree {
             this._copy(last, s);
         }
         this._pad(last, last + 1);
+    }
+
+    /**
+     * Move the items of an underfull leaf into the smaller of its neighbors under the same parent and free it, if
+     * the two fit in MERGE_MAX. Returns false if they don't (or the leaf is the root).
+     * @param {number} leaf
+     */
+    _merge(leaf) {
+        if (leaf === this._root) return false;
+        const count = this._count, ptrs = this._ptrs;
+        const e = this._entryOf(leaf), first = this._parent[leaf] * M, last = first + count[this._parent[leaf]] - 1;
+
+        let t = e > first ? e - 1 : -1;
+        if (e < last && (t === -1 || count[ptrs[e + 1]] < count[ptrs[t]])) t = e + 1;
+        if (t === -1) return false;
+        const target = ptrs[t], n = count[leaf];
+        if (n + count[target] > MERGE_MAX) return false;
+
+        const slotOf = this._slotOf;
+        let to = target * M + count[target];
+        for (let i = leaf * M, end = i + n; i < end; i++) {
+            slotOf[ptrs[i]] = to;
+            this._copy(i, to++);
+        }
+        count[target] += n;
+        count[leaf] = 0;
+        this._pad(leaf * M, leaf * M + n);
+
+        // the target's entry must cover the leaf's key range at once (a left neighbor takes its max key); if the leaf
+        // was marked, the entries above may be too small for its items, so the target takes over the mark
+        this._setEntry(t, target);
+        if (this._dirty[leaf] !== 0) this._mark(target);
+        this._refit(leaf);
+        return true;
     }
 
     /**
