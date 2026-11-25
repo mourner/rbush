@@ -1,10 +1,13 @@
 // Seeded fuzz: random add / remove / update (jitter + teleport) against brute force, plus white-box invariants
 // (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order). Before a lazy refit,
 // entries above leaves updated in place may be stale, but max keys must still be upper bounds and in order.
+// rebuild() runs at random points, and over a range of sizes around node and sort-path boundaries.
 import HTree from './htree.js';
 
 const M = 16;
 const MAX_KEY = 0x3fffffff;
+const DEAD = 0xffffffff;
+const FILL = 14;
 
 /** @param {number} a */
 function mulberry32(a) {
@@ -21,8 +24,9 @@ function mulberry32(a) {
  * @param {any} t
  * @param {Map<number, number[]>} live
  * @param {boolean} exact false: allow entries left stale by pending in-place updates
+ * @param {boolean} [packed] right after rebuild: nodes at most FILL full, keys fresh from the boxes
  */
-function check(t, live, exact) {
+function check(t, live, exact, packed = false) {
     const boxes = t._boxes, keys = t._keys, ptrs = t._ptrs;
     let items = 0;
 
@@ -30,6 +34,7 @@ function check(t, live, exact) {
     const visit = (node, level, loKey) => {
         const n = t._count[node];
         if (node !== t._root && n === 0) throw new Error('empty non-root node');
+        if (packed && n > FILL && node !== t._root) throw new Error('packed node over FILL');
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxKey = -Infinity, prev = loKey;
         for (let i = 0; i < M; i++) {
@@ -46,6 +51,7 @@ function check(t, live, exact) {
                 if (t._slotOf[id] !== s) throw new Error('slotOf mismatch');
                 if (!b || b[0] !== boxes[p] || b[1] !== boxes[p + 1] || b[2] !== boxes[p + 2] || b[3] !== boxes[p + 3]) throw new Error('stale or wrong box');
                 if (keys[s] < loKey) throw new Error('leaf key below its range');
+                if (packed && keys[s] !== t._key(b[0], b[1], b[2], b[3])) throw new Error('not re-keyed');
 
             } else {
                 const child = ptrs[s];
@@ -68,6 +74,10 @@ function check(t, live, exact) {
 
     visit(t._root, t._height - 1, -Infinity);
     if (items !== live.size) throw new Error(`item count ${items} vs ${live.size}`);
+    if (t.size !== live.size) throw new Error(`size ${t.size} vs ${live.size}`);
+    for (let id = 0; id < t._nextId; id++) {
+        if (!live.has(id) && t._slotOf[id] !== DEAD) throw new Error('removed id not marked dead');
+    }
 
     if (exact) {
         if (t._numDirty !== 0) throw new Error('dirty list not empty');
@@ -82,6 +92,7 @@ for (let seed = 1; seed <= 12; seed++) {
     const ids = [];
     const clustered = seed % 3 === 0;
     const ops = 12000;
+    let rebuilds = 0;
 
     // some boxes fall outside the domain
     const box = () => {
@@ -127,6 +138,12 @@ for (let seed = 1; seed <= 12; seed++) {
             }
         }
 
+        if (rnd() < 1 / 700) { // with in-place updates likely pending
+            t.rebuild();
+            check(t, live, true, true);
+            rebuilds++;
+        }
+
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
         check(t, live, false);
@@ -164,5 +181,78 @@ for (let seed = 1; seed <= 12; seed++) {
     check(t, live, true);
     if (t.search(-Infinity, -Infinity, Infinity, Infinity).length !== 0) throw new Error('not empty');
 
-    console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; peak nodes ${t._numNodes}, in-place updates ${t.inPlace})`);
+    const peak = t._numNodes;
+    t.rebuild();
+    check(t, live, true, true);
+
+    console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; peak nodes ${peak}, ` +
+        `in-place updates ${t.inPlace}, rebuilds ${rebuilds})`);
 }
+
+// rebuild at sizes around one leaf, one full internal level and the radix threshold, after removes and with
+// in-place updates pending, then keep going on the packed tree
+for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 8192, 8193, 20000]) {
+    const rnd = mulberry32(n + 1);
+    const t = new HTree([0, 0, 1000, 1000]);
+    const live = new Map();
+    const box = () => {
+        const x = rnd() * 1000, y = rnd() * 1000;
+        return [x, y, x + rnd() * 5, y + rnd() * 5];
+    };
+    const query = () => {
+        const x0 = rnd() * 1000, y0 = rnd() * 1000, x1 = x0 + rnd() * 80, y1 = y0 + rnd() * 80;
+        const got = t.search(x0, y0, x1, y1).sort((a, b) => a - b);
+        const expected = [];
+        for (const [id, b] of live) if (x1 >= b[0] && y1 >= b[1] && x0 <= b[2] && y0 <= b[3]) expected.push(id);
+        expected.sort((a, b) => a - b);
+        if (got.length !== expected.length || got.some((v, j) => v !== expected[j])) throw new Error(`search mismatch at n ${n}`);
+    };
+
+    // n + 10% adds, then remove that many, so that some ids are dead
+    const extra = Math.ceil(n / 10);
+    for (let i = 0; i < n + extra; i++) {
+        const b = box();
+        live.set(t.add(b[0], b[1], b[2], b[3]), b);
+    }
+    for (let i = 0; i < extra; i++) {
+        const id = Math.floor(rnd() * t._nextId);
+        if (!live.has(id)) { i--; continue; }
+        t.remove(id);
+        live.delete(id);
+    }
+    for (const [id, o] of live) { // jitter everything, in place where it stays
+        const dx = rnd() - 0.5, dy = rnd() - 0.5, b = [o[0] + dx, o[1] + dy, o[2] + dx, o[3] + dy];
+        t.update(id, b[0], b[1], b[2], b[3]);
+        live.set(id, b);
+    }
+
+    t.rebuild();
+    check(t, live, true, true);
+    t.rebuild(); // twice in a row, from a packed tree
+    check(t, live, true, true);
+    for (let q = 0; q < 20; q++) query();
+
+    for (let i = 0; i < 2000; i++) {
+        const r = rnd(), ids = [...live.keys()];
+        if (r < 0.4 || ids.length === 0) {
+            const b = box();
+            live.set(t.add(b[0], b[1], b[2], b[3]), b);
+        } else if (r < 0.7) {
+            const id = ids[Math.floor(rnd() * ids.length)];
+            t.remove(id);
+            live.delete(id);
+        } else {
+            const id = ids[Math.floor(rnd() * ids.length)], b = box();
+            t.update(id, b[0], b[1], b[2], b[3]);
+            live.set(id, b);
+        }
+        if (i === 1000) {
+            t.rebuild();
+            check(t, live, true, true);
+        }
+    }
+    t._flush();
+    check(t, live, true);
+    for (let q = 0; q < 20; q++) query();
+}
+console.log('rebuild sizes ok');

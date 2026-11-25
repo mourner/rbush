@@ -21,6 +21,14 @@ const HILBERT_MAX = (1 << 16) - 1;
 // compression, and a difference of two keys fits an int32, so its sign bit is the comparison.
 const MAX_KEY = 0x3fffffff;
 
+const DEAD = 0xffffffff; // slotOf value of a removed id
+
+const FILL = 14;         // items per leaf and children per internal node written by rebuild, so inserts don't split at once
+const RADIX_MIN = 8192;  // below this, filling the radix count table costs more than a quicksort
+
+/** @type {Uint32Array | undefined} */
+let radixCounts; // shared by all trees: 2^16 counts for the low key digit, 2^15 for the high one
+
 export default class HTree {
     /**
      * @param {[number, number, number, number]} [domain] Coordinate bounds [minX, minY, maxX, maxY] for the Hilbert grid.
@@ -52,8 +60,9 @@ export default class HTree {
         this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
         this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
 
-        this._slotOf = new Uint32Array(1024);                 // id → leaf slot holding it (leaf node = slot / M)
+        this._slotOf = new Uint32Array(1024);                 // id → leaf slot holding it (leaf node = slot / M), or DEAD
         this._nextId = 0;
+        this._scratch = new ArrayBuffer(0);                   // rebuild: sort pairs and radix buffer, kept between calls
 
         this._height = 1;
         this._path = new Uint32Array(16);                     // level → slot taken by the last _insert descent
@@ -82,6 +91,7 @@ export default class HTree {
      */
     remove(id) {
         this._detach(id);
+        this._slotOf[id] = DEAD;
         this.size--;
     }
 
@@ -194,6 +204,108 @@ export default class HTree {
         }
 
         return results;
+    }
+
+    /**
+     * Rewrite the tree packed in key order, with items re-keyed from their current boxes: leaves and internal nodes
+     * FILL / M full, laid out level by level from the start of the arena. Use it after a frame where most items
+     * moved, or to restore fill and locality after heavy churn.
+     */
+    rebuild() {
+        const n = this.size, slotOf = this._slotOf;
+
+        // scratch: (key, source slot) pairs and the radix buffer for them; after the sort, the sorted ids take the
+        // place of the keys and the radix buffer holds one box column at a time
+        if (this._scratch.byteLength < n * 16) this._scratch = new ArrayBuffer(n * 16);
+        const buf = this._scratch;
+        const sortKeys = new Int32Array(buf, 0, n), from = new Uint32Array(buf, n * 4, n);
+        const ids = new Uint32Array(buf, 0, n), col = new Float64Array(buf, n * 8, n);
+
+        // walk the leaves rather than the ids: one cache miss per leaf instead of one per item
+        let boxes = this._boxes, m = 0;
+        const stack = [this._root * 16 + this._height - 1];
+        while (stack.length > 0) {
+            const next = /** @type {number} */ (stack.pop()), node = next >> 4, level = next & 15;
+            const start = node * M, end = start + this._count[node];
+            if (level > 0) {
+                for (let s = start; s < end; s++) stack.push(this._ptrs[s] * 16 + level - 1);
+                continue;
+            }
+            for (let s = start; s < end; s++, m++) {
+                const p = s * 4;
+                sortKeys[m] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
+                from[m] = s;
+            }
+        }
+        if (n >= RADIX_MIN) {
+            radixSort(sortKeys, from, new Int32Array(buf, n * 8, n), new Uint32Array(buf, n * 12, n), n);
+        } else {
+            quickSort(sortKeys, from, 0, n - 1);
+        }
+
+        // node counts per level, leaves first; n ≤ M fits one leaf, which is then the root
+        const numLeaves = n <= M ? 1 : Math.ceil(n / FILL);
+        let total = numLeaves;
+        for (let k = numLeaves; k > 1;) {
+            k = k <= M ? 1 : Math.ceil(k / FILL);
+            total += k;
+        }
+        while (this._capacity < total) this._growArena();
+
+        const keys = this._keys, ptrs = this._ptrs, count = this._count, parent = this._parent;
+        boxes = this._boxes;
+
+        // leaf i takes sorted items [⌊i·n / numLeaves⌋, ⌊(i + 1)·n / numLeaves⌋); every read of an old slot (ids
+        // here, then each box column) goes before the writes of that array, so old and new slots can overlap anywhere
+        for (let i = 0, j = 0; i < numLeaves; i++) {
+            const end = Math.floor((i + 1) * n / numLeaves);
+            for (let s = i * M; j < end; j++, s++) {
+                keys[s] = sortKeys[j];
+                ids[j] = ptrs[from[j]];
+            }
+        }
+        for (let c = 0; c < 4; c++) {
+            for (let j = 0; j < n; j++) col[j] = boxes[from[j] * 4 + c];
+            for (let i = 0, j = 0; i < numLeaves; i++) {
+                const end = Math.floor((i + 1) * n / numLeaves);
+                for (let p = i * M * 4 + c; j < end; j++, p += 4) boxes[p] = col[j];
+            }
+        }
+        for (let i = 0, j = 0; i < numLeaves; i++) {
+            const base = i * M, end = Math.floor((i + 1) * n / numLeaves);
+            count[i] = end - j;
+            for (let s = base; j < end; j++, s++) {
+                const id = ids[j];
+                ptrs[s] = id;
+                slotOf[id] = s;
+            }
+            this._pad(base + count[i], base + M);
+        }
+
+        // internal levels, each right after the one below
+        let lo = 0, num = numLeaves, height = 1;
+        while (num > 1) {
+            const up = lo + num, numUp = num <= M ? 1 : Math.ceil(num / FILL);
+            for (let k = 0, c = 0; k < numUp; k++) {
+                const node = up + k, base = node * M, end = Math.floor((k + 1) * num / numUp);
+                count[node] = end - c;
+                for (let s = base; c < end; c++, s++) {
+                    this._setEntry(s, lo + c);
+                    parent[lo + c] = node;
+                }
+                this._pad(base + count[node], base + M);
+            }
+            lo = up;
+            num = numUp;
+            height++;
+        }
+
+        this._dirty.fill(0, 0, this._numNodes);
+        this._numDirty = 0;
+        this._numNodes = total;
+        this._freeNodes.length = 0;
+        this._root = lo;
+        this._height = height;
     }
 
     /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
@@ -519,19 +631,22 @@ export default class HTree {
     _alloc() {
         if (this._freeNodes.length > 0) return /** @type {number} */ (this._freeNodes.pop());
 
-        if (this._numNodes === this._capacity) {
-            const capacity = this._capacity *= 2;
-            this._boxes = grow(this._boxes, capacity * M * 4);
-            this._keys = grow(this._keys, capacity * M);
-            this._ptrs = grow(this._ptrs, capacity * M);
-            this._count = grow(this._count, capacity);
-            this._parent = grow(this._parent, capacity);
-            this._dirty = grow(this._dirty, capacity);
-        }
+        if (this._numNodes === this._capacity) this._growArena();
 
         const node = this._numNodes++;
         this._pad(node * M, node * M + M);
         return node;
+    }
+
+    /** Double the arena's node capacity. */
+    _growArena() {
+        const capacity = this._capacity *= 2;
+        this._boxes = grow(this._boxes, capacity * M * 4);
+        this._keys = grow(this._keys, capacity * M);
+        this._ptrs = grow(this._ptrs, capacity * M);
+        this._count = grow(this._count, capacity);
+        this._parent = grow(this._parent, capacity);
+        this._dirty = grow(this._dirty, capacity);
     }
 
     /**
@@ -578,6 +693,90 @@ function grow(arr, length) {
     const result = /** @type {T} */ (new /** @type {any} */ (arr.constructor)(length));
     result.set(arr);
     return result;
+}
+
+/**
+ * Sort (key, value) pairs by key with two LSD radix passes, on the low 16 bits and then the high 15 (unsigned once
+ * biased); the pairs move together, so both passes read sequentially.
+ * @param {Int32Array} keys sorted in place
+ * @param {Uint32Array} values moved along with keys
+ * @param {Int32Array} keys2 scratch of the same length
+ * @param {Uint32Array} values2 scratch of the same length
+ * @param {number} n
+ */
+function radixSort(keys, values, keys2, values2, n) {
+    if (!radixCounts) radixCounts = new Uint32Array(0x18000);
+    const counts = radixCounts.fill(0), HI = 0x10000;
+
+    for (let i = 0; i < n; i++) {
+        const k = keys[i];
+        counts[k & 0xffff]++;
+        counts[HI + (k >> 16) + 0x4000]++;
+    }
+    for (let i = 0, lo = 0, hi = 0; i < 0x10000; i++) {
+        const c = counts[i];
+        counts[i] = lo;
+        lo += c;
+        if (i < 0x8000) {
+            const d = counts[HI + i];
+            counts[HI + i] = hi;
+            hi += d;
+        }
+    }
+    for (let i = 0; i < n; i++) {
+        const k = keys[i], j = counts[k & 0xffff]++;
+        keys2[j] = k;
+        values2[j] = values[i];
+    }
+    for (let i = 0; i < n; i++) {
+        const k = keys2[i], j = counts[HI + (k >> 16) + 0x4000]++;
+        keys[j] = k;
+        values[j] = values2[i];
+    }
+}
+
+/**
+ * Sort (key, value) pairs in [left, right] by key: quicksort, with insertion sort for short ranges.
+ * @param {Int32Array} keys
+ * @param {Uint32Array} values moved along with keys
+ * @param {number} left
+ * @param {number} right
+ */
+function quickSort(keys, values, left, right) {
+    while (right - left > 16) {
+        const a = keys[left], b = keys[(left + right) >> 1], c = keys[right];
+        const pivot = (a > b) !== (a > c) ? a : (b < a) !== (b < c) ? b : c;
+        let i = left - 1, j = right + 1;
+        while (true) {
+            do i++; while (keys[i] < pivot);
+            do j--; while (keys[j] > pivot);
+            if (i >= j) break;
+            const k = keys[i], v = values[i];
+            keys[i] = keys[j];
+            values[i] = values[j];
+            keys[j] = k;
+            values[j] = v;
+        }
+        // recurse into the smaller half, loop on the larger
+        if (j - left < right - j) {
+            quickSort(keys, values, left, j);
+            left = j + 1;
+        } else {
+            quickSort(keys, values, j + 1, right);
+            right = j;
+        }
+    }
+    for (let i = left + 1; i <= right; i++) {
+        const k = keys[i], v = values[i];
+        let j = i - 1;
+        while (j >= left && keys[j] > k) {
+            keys[j + 1] = keys[j];
+            values[j + 1] = values[j];
+            j--;
+        }
+        keys[j + 1] = k;
+        values[j + 1] = v;
+    }
 }
 
 /** @param {number} v */
