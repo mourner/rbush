@@ -3,7 +3,9 @@
 // entries of leaves marked by updates may be stale (max keys still upper bounds and in order); all others must be
 // exact, as must every internal node's entry relative to the entries in the node. rebuild() runs at random points,
 // and over a range of sizes around node boundaries; each tree starts pending, and again after draining to empty.
-// Directed cases at the end cover what the fuzz can't see: items that moved away must not stay in their leaf.
+// One kind of data starts in a tight cluster and spreads out by 2^20, so the domain keeps growing.
+// Directed cases at the end cover what the fuzz can't see: items that moved away must not stay in their leaf, keys
+// must come through domain growth exact, and degenerate domains must work.
 import HTree from './htree.js';
 
 const M = 16;
@@ -26,7 +28,8 @@ function mulberry32(a) {
  * @param {any} t
  * @param {Map<number, number[]>} live
  * @param {boolean} exact false: allow entries left stale by pending in-place updates
- * @param {boolean} [packed] right after rebuild: nodes at most FILL full, keys fresh from the boxes
+ * @param {boolean} [packed] right after rebuild: nodes at most FILL full, keys fresh from the boxes, every finite
+ * center inside the domain
  */
 function check(t, live, exact, packed = false) {
     const boxes = t._boxes, keys = t._keys, ptrs = t._ptrs;
@@ -54,6 +57,7 @@ function check(t, live, exact, packed = false) {
                 if (!b || b[0] !== boxes[p] || b[1] !== boxes[p + 1] || b[2] !== boxes[p + 2] || b[3] !== boxes[p + 3]) throw new Error('stale or wrong box');
                 if (keys[s] < loKey) throw new Error('leaf key below its range');
                 if (packed && keys[s] !== t._key(b[0], b[1], b[2], b[3])) throw new Error('not re-keyed');
+                if (packed && t._outside((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)) throw new Error('center outside the domain');
 
             } else {
                 const child = ptrs[s];
@@ -105,21 +109,21 @@ function check(t, live, exact, packed = false) {
 
 for (let seed = 1; seed <= 12; seed++) {
     const rnd = mulberry32(seed);
-    const t = new HTree([0, 0, 1000, 1000]);
+    const t = new HTree();
     const live = new Map();
     const ids = [];
-    const clustered = seed % 3 === 0;
+    const clustered = seed % 3 === 0, expanding = seed % 3 === 1;
     const ops = 12000;
-    let rebuilds = 0;
+    let rebuilds = 0, spread = 1000;
 
-    // some boxes fall outside the domain
     const box = () => {
-        const x = clustered ? 500 + rnd() * 3 : rnd() * 1100 - 50;
-        const y = clustered ? 500 + rnd() * 3 : rnd() * 1100 - 50;
+        const x = clustered ? 500 + rnd() * 3 : 500 + (rnd() - 0.5) * spread;
+        const y = clustered ? 500 + rnd() * 3 : 500 + (rnd() - 0.5) * spread;
         return [x, y, x + rnd() * 5, y + rnd() * 5];
     };
 
     for (let op = 0; op < ops; op++) {
+        if (expanding) spread = 2 ** (op / 600);
         // grow, churn, then drain towards empty
         const phase = op / ops;
         const pAdd = phase < 0.4 ? 0.6 : phase < 0.7 ? 0.3 : 0.05;
@@ -173,9 +177,9 @@ for (let seed = 1; seed <= 12; seed++) {
 
         // query 0 is infinite on both sides, 1 is small, 2–3 are large
         for (let q = 0; q < 4; q++) {
-            const qx = clustered ? 499 + rnd() * 4 : rnd() * 1000;
-            const qy = clustered ? 499 + rnd() * 4 : rnd() * 1000;
-            const qs = q === 0 ? Infinity : rnd() * (q < 2 ? 2 : 80);
+            const qx = clustered ? 499 + rnd() * 4 : 500 + (rnd() - 0.5) * spread;
+            const qy = clustered ? 499 + rnd() * 4 : 500 + (rnd() - 0.5) * spread;
+            const qs = q === 0 ? Infinity : rnd() * (q < 2 ? 2 : 80) * Math.max(1, spread / 1000);
             const x0 = q === 0 ? -Infinity : qx;
             const y0 = q === 0 ? -Infinity : qy;
             const x1 = qx + qs, y1 = qy + qs;
@@ -204,7 +208,7 @@ for (let seed = 1; seed <= 12; seed++) {
     t.rebuild();
     check(t, live, false);
 
-    console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; ` +
+    console.log(`seed ${seed} ok (${clustered ? 'clustered' : expanding ? 'expanding' : 'uniform'}; ` +
         `reinserted ${t.reinserted}, rebuilds ${rebuilds})`);
 }
 
@@ -212,7 +216,7 @@ for (let seed = 1; seed <= 12; seed++) {
 // in-place updates pending, then keep going on the packed tree
 for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 8192, 8193, 20000]) {
     const rnd = mulberry32(n + 1);
-    const t = new HTree([0, 0, 1000, 1000], n % 2 ? n : 0);
+    const t = new HTree(n % 2 ? n : 0);
     const live = new Map();
     const box = () => {
         const x = rnd() * 1000, y = rnd() * 1000;
@@ -287,7 +291,7 @@ console.log('rebuild sizes ok');
 {
     const rnd = mulberry32(7);
     const fresh = () => {
-        const t = new HTree([0, 0, 1000, 1000]);
+        const t = new HTree();
         for (let i = 0; i < 5000; i++) t.add(rnd() * 100, rnd() * 100);
         t.search(0, 0, 0, 0); // packed: leaves are 14 full
         return t;
@@ -332,7 +336,7 @@ console.log('rebuild sizes ok');
 
 // Ids: removed ones are reused last-in first-out, also across draining to empty; ids that aren't live throw
 {
-    const t = new HTree([0, 0, 1000, 1000]);
+    const t = new HTree();
     const throws = (fn, what) => {
         try { fn(); } catch { return; }
         throw new Error(`no throw for ${what}`);
@@ -352,4 +356,132 @@ console.log('rebuild sizes ok');
     if (t.add(5, 5) !== 100 || t.add(6, 6) !== 99) throw new Error('ids not reused after draining');
     if (t.search(5, 5, 6, 6).sort((a, b) => a - b).join() !== '99,100') throw new Error('reused ids lost');
     console.log('ids ok');
+}
+
+/**
+ * Brute-force search check and a full structural check after a flush.
+ * @param {any} t
+ * @param {Map<number, number[]>} live
+ * @param {() => number} rnd
+ * @param {number} lo
+ * @param {number} hi
+ */
+function verify(t, live, rnd, lo, hi) {
+    check(t, live, false);
+    for (let q = 0; q < 20; q++) {
+        const x0 = lo + rnd() * (hi - lo), y0 = lo + rnd() * (hi - lo), w = rnd() * (hi - lo) / 10;
+        const got = t.search(x0, y0, x0 + w, y0 + w).sort((a, b) => a - b);
+        const expected = [];
+        for (const [id, b] of live) if (x0 + w >= b[0] && y0 + w >= b[1] && x0 <= b[2] && y0 <= b[3]) expected.push(id);
+        expected.sort((a, b) => a - b);
+        if (got.join() !== expected.join()) throw new Error(`search mismatch in [${lo}, ${hi}]`);
+    }
+    // an infinite query is clamped to finite bounds, which don't reach boxes that lie entirely at infinity
+    const all = [...live.values()].filter(b => b[0] < Infinity && b[1] < Infinity && b[2] > -Infinity && b[3] > -Infinity);
+    if (t.search(-Infinity, -Infinity, Infinity, Infinity).length !== all.length) throw new Error('lost items');
+    if (!t._pending) check(t, live, true);
+}
+
+// Domain growth maps every stored key to exactly the key its box gets in the grown domain, as long as the float math
+// is exact: here the domain is held at dyadic bounds (rebuild and root splits don't refit it) and items sit at cell
+// centers. Growth comes from adds and from updates through the flush, in all directions from every orientation, by
+// up to 2^30, so also past the 16 doublings after which old keys collapse into one.
+{
+    const rnd = mulberry32(11);
+    let grown = 0;
+    for (let round = 0; round < 24; round++) {
+        const t = new HTree();
+        t._pending = false;
+        t._setDomain = () => {};
+        Object.assign(t, {_minX: 0, _minY: 0, _side: 1024, _scale: 64});
+        t._setOrient(round % 4);
+
+        const live = new Map(), ids = [];
+        const cell = () => (Math.floor(rnd() * 65536) + 0.5) / 64;
+        const far = () => (rnd() < 0.5 ? -1 : 1) * 1024 * 2 ** Math.floor(rnd() * (round < 12 ? 4 : 30)) + cell();
+        const add = (x, y) => {
+            const id = t.add(x, y);
+            live.set(id, [x, y, x, y]);
+            ids.push(id);
+        };
+        for (let i = 0; i < 2000; i++) add(cell(), cell());
+
+        for (let step = 0; step < 8; step++) {
+            const side = t._side, x = rnd() < 0.7 ? far() : cell(), y = rnd() < 0.7 ? far() : cell();
+            if (step % 2) {
+                add(x, y);
+            } else {
+                const id = ids[Math.floor(rnd() * ids.length)];
+                t.update(id, x, y);
+                live.set(id, [x, y, x, y]);
+                t.search(0, 0, 0, 0);
+            }
+            if (t._side !== side) grown++;
+            check(t, live, true);
+            for (const [id, b] of live) {
+                if (t._keys[t._slotOf[id]] !== t._key(b[0], b[1], b[2], b[3])) throw new Error(`key not exact after growth (round ${round})`);
+            }
+        }
+    }
+    if (grown < 60) throw new Error(`domain grew only ${grown} times`);
+}
+
+// Degenerate starting domains: all centers in one point (at 0 and far from it), a few points, centers that aren't
+// finite and huge coordinates; then data that spreads far beyond. Also a sweep in x, which doubles the domain over
+// and over while the tree grows.
+{
+    const rnd = mulberry32(5);
+    const run = (name, first, then, lazy) => {
+        const t = new HTree(), live = new Map();
+        if (!lazy) t._pending = false;
+        const add = b => live.set(t.add(b[0], b[1], b[2], b[3]), b);
+        for (const b of first) add(b);
+        t.search(0, 0, 0, 0);
+        for (const b of then) add(b);
+        let lo = Infinity, hi = -Infinity;
+        for (const b of live.values()) for (const v of b) if (Number.isFinite(v)) {
+            lo = Math.min(lo, v);
+            hi = Math.max(hi, v);
+        }
+        verify(t, live, rnd, lo, hi);
+        for (const [id, b] of live) if (rnd() < 0.3) { // move some back to the middle, through the flush
+            const nb = [(lo + hi) / 2, (lo + hi) / 2, (lo + hi) / 2 + 1, (lo + hi) / 2 + 1];
+            t.update(id, nb[0], nb[1], nb[2], nb[3]);
+            live.set(id, nb);
+            if (b[0] === lo) break;
+        }
+        verify(t, live, rnd, lo, hi);
+        t.rebuild();
+        verify(t, live, rnd, lo, hi);
+        if (!(t._side < Infinity && t._side > 0)) throw new Error(`${name}: bad domain side ${t._side}`);
+    };
+    const pts = (n, f) => Array.from({length: n}, (_, i) => f(i));
+    const spread = (n, r, c = 0) => pts(n, () => {
+        const x = c + (rnd() - 0.5) * r, y = c + (rnd() - 0.5) * r;
+        return [x, y, x, y];
+    });
+
+    for (const lazy of [false, true]) {
+        run('one point at 0', pts(40, () => [0, 0, 0, 0]), spread(3000, 1e6), lazy);
+        run('one point far from 0', pts(40, () => [1e9, -1e9, 1e9, -1e9]), spread(3000, 1e4, 1e9), lazy);
+        run('a few points', spread(3, 1e-3), spread(3000, 1e3), lazy);
+        run('two points then far', [[0, 0, 0, 0], [1, 1, 1, 1]], spread(3000, 2 ** 40), lazy);
+        run('not finite', [[Infinity, 0, Infinity, 0], [-Infinity, -Infinity, Infinity, Infinity],
+            ...spread(30, 10)], [...spread(3000, 1e5), [0, -Infinity, 0, 0], [1e308, 1e308, 1e308, 1e308]], lazy);
+        run('huge', pts(20, () => [-1e308, -1e308, -1e308, -1e308]), [...spread(100, 1e300), [1e308, 1e308, 1e308, 1e308],
+            ...spread(1000, 1e3)], lazy);
+        run('sweep in x', [], pts(20000, i => [i * 0.01, rnd(), i * 0.01, rnd() + 1]), lazy);
+    }
+
+    // a pending update far out: the pack has to fit the domain to it too
+    const t = new HTree(), live = new Map();
+    for (let i = 0; i < 100; i++) {
+        const x = rnd(), y = rnd();
+        live.set(t.add(x, y), [x, y, x, y]);
+    }
+    t.update(5, 1e6, -1e6);
+    live.set(5, [1e6, -1e6, 1e6, -1e6]);
+    t.search(0, 0, 0, 0);
+    check(t, live, true, true);
+    console.log('domain ok');
 }
