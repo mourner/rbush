@@ -492,5 +492,20 @@ function verify(t, live, rnd, lo, hi) {
     live.set(5, [1e6, -1e6, 1e6, -1e6]);
     t.search(0, 0, 0, 0);
     check(t, live, true, true);
+
+    // a small tree stays pending while its items wander and some leave; the pack fits where they are, not where
+    // they have been
+    for (const leave of [false, true]) {
+        const t = new HTree(), ids = [];
+        for (let i = 0; i < 10; i++) ids.push(t.add(i, i));
+        for (let f = 1; f <= 100; f++) {
+            for (const id of ids) t.update(id, f * 1e4 + id, id);
+            t.search(0, 0, 0, 0);
+        }
+        if (leave) t.remove(ids.pop());
+        for (let i = 0; i < 100; i++) t.add(1e6 + i % 10, Math.floor(i / 10));
+        t.search(0, 0, 0, 0);
+        if (t._pending || t._side > 100) throw new Error(`pending bounds kept stale positions (${t._side})`);
+    }
     console.log('domain ok');
 }

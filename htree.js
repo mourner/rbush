@@ -54,7 +54,8 @@ export default class HTree {
         this._side = 0;
         this._scale = 0;
         // bounds of the centers the domain has yet to cover: those of pending items (rebuild fits the domain to
-        // them), or of the items _evict found outside the domain (_flush grows it to them)
+        // them; NaN once a pending item moved or left, so that rebuild finds them again rather than fit the domain
+        // to every place items have been), or of the items _evict found outside the domain (_flush grows it to them)
         this._outX0 = Infinity;
         this._outY0 = Infinity;
         this._outX1 = -Infinity;
@@ -146,6 +147,7 @@ export default class HTree {
                 this._copy(last, s);
             }
             this._pad(last, last + 1);
+            this._outX0 = NaN;
         } else {
             const leaf = Math.floor(s / M);
             this._take(s);
@@ -176,7 +178,7 @@ export default class HTree {
         boxes[p + 2] = maxX;
         boxes[p + 3] = maxY;
         if (this._pending) {
-            this._extendOut(minX, minY, maxX, maxY);
+            this._outX0 = NaN;
             return;
         }
 
@@ -277,10 +279,18 @@ export default class HTree {
         const sortKeys = new Int32Array(buf, 0, n * 5), from = new Uint32Array(buf, n * 4, n * 5);
         const ids = new Uint32Array(buf, 0, n), cols = new Float64Array(buf, n * 8, n * 2);
 
-        // a pending tree has the bounds of its centers already; other trees get keys from the current domain, along
-        // with the bounds of the finite centers (doubled), and only if the domain doesn't fit them is it fitted and
-        // are the keys computed again, which reads every box a second time
-        if (this._pending) this._fitOut();
+        // a pending tree has the bounds of its centers already (unless its items moved or left); other trees get keys
+        // from the current domain, along with the bounds of the finite centers (doubled), and only if the domain
+        // doesn't fit them is it fitted and are the keys computed again, which reads every box a second time
+        if (this._pending) {
+            if (Number.isNaN(this._outX0)) {
+                this._resetOut();
+                for (let p = 0; p < n * 4; p += 4) {
+                    this._extendOut(this._boxes[p], this._boxes[p + 1], this._boxes[p + 2], this._boxes[p + 3]);
+                }
+            }
+            this._fitOut();
+        }
         let boxes = this._boxes, m = n * 4, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         // walk the leaves rather than the ids: one cache miss per leaf instead of one per item
         const stack = this._pending ? [] : [this._root * 16 + this._height - 1];
