@@ -8,7 +8,7 @@ import HTree from './htree.js';
 
 const M = 16;
 const MAX_KEY = 0x3fffffff;
-const DEAD = 0xffffffff;
+const DEAD = 0x80000000;
 const FILL = 14;
 
 /** @param {number} a */
@@ -85,9 +85,14 @@ function check(t, live, exact, packed = false) {
     }
     if (items !== live.size) throw new Error(`item count ${items} vs ${live.size}`);
     if (t.size !== live.size) throw new Error(`size ${t.size} vs ${live.size}`);
-    for (let id = 0; id < t._nextId; id++) {
-        if (!live.has(id) && t._slotOf[id] !== DEAD) throw new Error('removed id not marked dead');
+    // the free list holds exactly the issued ids that aren't live, each once; ids never issued read DEAD
+    const free = new Set();
+    for (let id = t._freeId; id !== -1; id = (t._slotOf[id] & ~DEAD) - 1) {
+        if (live.has(id) || free.has(id) || id >= t._nextId || t._slotOf[id] < DEAD) throw new Error('bad free list');
+        free.add(id);
     }
+    if (free.size + live.size !== t._nextId) throw new Error('removed ids missing from the free list');
+    for (let id = t._nextId; id < t._slotOf.length; id++) if (t._slotOf[id] !== DEAD) throw new Error('unissued id not DEAD');
 
     if (t.size === 0 && (!t._pending || t._height !== 1 || t._count[t._root] !== 0)) throw new Error('empty tree not reset');
 
@@ -323,4 +328,28 @@ console.log('rebuild sizes ok');
     for (const id of itemsOf(s.t, neighbor).slice(0, 8)) s.t.remove(id); // the neighbor is underfull and looks for a target
     settledFar(s.t, s.id, 'a merge into the leaf');
     console.log('moved items ok');
+}
+
+// Ids: removed ones are reused last-in first-out, also across draining to empty; ids that aren't live throw
+{
+    const t = new HTree([0, 0, 1000, 1000]);
+    const throws = (fn, what) => {
+        try { fn(); } catch { return; }
+        throw new Error(`no throw for ${what}`);
+    };
+    for (let i = 0; i < 100; i++) t.add(i, i);
+    t.remove(10);
+    t.remove(20);
+    throws(() => t.remove(10), 'a removed id');
+    throws(() => t.update(20, 0, 0), 'an update of a removed id');
+    throws(() => t.getBox(10), 'getBox of a removed id');
+    for (const id of [100, 5000, -1, 1.5, NaN, undefined]) throws(() => t.getBox(/** @type {any} */ (id)), `id ${id}`);
+    if (t.add(1, 1) !== 20 || t.add(2, 2) !== 10 || t.add(3, 3) !== 100) throw new Error('ids not reused LIFO');
+    if (t.search(0, 0, 3, 3).sort((a, b) => a - b).join() !== '0,1,2,3,10,20,100') throw new Error('reused ids misplaced');
+
+    for (let id = 0; id <= 100; id++) t.remove(id); // drained: pending again, and the ids come back
+    if (t.size !== 0 || !t._pending) throw new Error('not drained');
+    if (t.add(5, 5) !== 100 || t.add(6, 6) !== 99) throw new Error('ids not reused after draining');
+    if (t.search(5, 5, 6, 6).sort((a, b) => a - b).join() !== '99,100') throw new Error('reused ids lost');
+    console.log('ids ok');
 }

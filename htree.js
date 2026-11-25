@@ -11,8 +11,8 @@
 // leaves out and inserts them again, and refits the entries above. While the tree is empty, adds only fill a run of
 // slots past the root, and the first search packs them with rebuild.
 //
-// Not hardened yet: ids are not reused or validated, internal nodes are never merged on underflow, the arena grows
-// by doubling, and the Hilbert domain is fixed at construction.
+// Not hardened yet: internal nodes are never merged on underflow, the arena grows by doubling, and the Hilbert domain
+// is fixed at construction.
 
 const M = 16;     // slots per node; the child pick in _insert is unrolled for this value
 const HALF = M / 2;
@@ -23,7 +23,9 @@ const HILBERT_MAX = (1 << 16) - 1;
 // compression, and a difference of two keys fits an int32, so its sign bit is the comparison.
 const MAX_KEY = 0x3fffffff;
 
-const DEAD = 0xffffffff; // slotOf value of a removed id
+// slotOf bit of an id that isn't live (slots stay below it); a removed id keeps 1 + the next id of the free list in
+// the low bits, 0 ending the list
+const DEAD = 0x80000000;
 
 const FILL = 14;         // items per leaf and children per internal node written by rebuild, so inserts don't split at once
 const MERGE_BELOW = HALF; // a leaf left with fewer items merges into a neighbor...
@@ -65,8 +67,9 @@ export default class HTree {
         this._numNodes = 0;                                   // nodes ever allocated (arena high-water mark)
         this._freeNodes = [];                                 // freed nodes, fully padded, reused by _alloc
 
-        this._slotOf = new Uint32Array(Math.max(1024, capacity)); // id → slot holding it (leaf or pending), or DEAD
-        this._nextId = 0;
+        this._slotOf = new Uint32Array(Math.max(1024, capacity)).fill(DEAD); // id → slot holding it (leaf or pending)
+        this._nextId = 0;                                     // ids ever issued
+        this._freeId = -1;                                    // the last removed id, reused first by add
         this._scratch = new ArrayBuffer(0);                   // rebuild: sort pairs and box columns, kept between calls
 
         // _flush: keys and ids of the items it takes out of their leaves (both twice as long, the second half is
@@ -93,8 +96,13 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     add(minX, minY, maxX = minX, maxY = minY) {
-        const id = this._nextId++;
-        if (id === this._slotOf.length) this._slotOf = grow(this._slotOf, id * 2);
+        let id = this._freeId;
+        if (id !== -1) {
+            this._freeId = (this._slotOf[id] & ~DEAD) - 1;
+        } else {
+            id = this._nextId++;
+            if (id === this._slotOf.length) this._growIds(id * 2);
+        }
 
         if (this._pending) {
             const s = M + this.size, p = s * 4;
@@ -114,11 +122,11 @@ export default class HTree {
     }
 
     /**
-     * Remove an item by id.
+     * Remove an item by id; its id is reused by a later add. Throws if the id isn't live.
      * @param {number} id
      */
     remove(id) {
-        const slotOf = this._slotOf, s = slotOf[id];
+        const slotOf = this._slotOf, s = this._slot(id);
         if (this._pending) { // the last pending item takes its slot
             const last = M + this.size - 1;
             if (s !== last) {
@@ -133,13 +141,15 @@ export default class HTree {
             const n = this._count[leaf];
             if ((n === 0 || this._dirty[leaf] === 0) && (n >= MERGE_BELOW || !this._merge(leaf))) this._refit(leaf);
         }
-        slotOf[id] = DEAD;
+        slotOf[id] = DEAD | (this._freeId + 1);
+        this._freeId = id;
         if (--this.size === 0) this.rebuild(); // back to a clean empty root, pending
     }
 
     /**
      * Change an item's box, keeping its id. This only writes the box: the flush before the next search decides
-     * whether the item stays in its leaf (see _evict) and refits the entries above, once per leaf.
+     * whether the item stays in its leaf (see _evict) and refits the entries above, once per leaf. Throws if the id
+     * isn't live.
      * @param {number} id
      * @param {number} minX
      * @param {number} minY
@@ -147,7 +157,7 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     update(id, minX, minY, maxX = minX, maxY = minY) {
-        const boxes = this._boxes, s = this._slotOf[id], p = s * 4;
+        const boxes = this._boxes, s = this._slot(id), p = s * 4;
         boxes[p] = minX;
         boxes[p + 1] = minY;
         boxes[p + 2] = maxX;
@@ -166,12 +176,31 @@ export default class HTree {
     }
 
     /**
-     * Get an item's box as [minX, minY, maxX, maxY].
+     * Get an item's box as [minX, minY, maxX, maxY]. Throws if the id isn't live.
      * @param {number} id
      */
     getBox(id) {
-        const s = this._slotOf[id];
+        const s = this._slot(id);
         return Array.from(this._boxes.subarray(s * 4, s * 4 + 4));
+    }
+
+    /**
+     * The slot of a live item (a removed or never issued id, or anything that isn't one, reads DEAD or undefined).
+     * @param {number} id
+     */
+    _slot(id) {
+        const s = this._slotOf[id];
+        if (!(s < DEAD)) throw new Error(`No item with id ${id}.`);
+        return s;
+    }
+
+    /**
+     * @param {number} length
+     */
+    _growIds(length) {
+        const n = this._slotOf.length;
+        this._slotOf = grow(this._slotOf, length);
+        this._slotOf.fill(DEAD, n);
     }
 
     /**
@@ -338,7 +367,7 @@ export default class HTree {
     reserve(n) {
         const nodes = packedNodes(n), ids = this._nextId + n - this.size;
         if (this._capacity < nodes) this._growArena(nodes);
-        if (this._slotOf.length < ids) this._slotOf = grow(this._slotOf, ids);
+        if (this._slotOf.length < ids) this._growIds(ids);
     }
 
     /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
