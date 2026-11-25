@@ -111,6 +111,39 @@ function check(t, live, exact, packed = false) {
     }
 }
 
+/**
+ * neighbors against brute force: the same number of results, each a distinct live item that passes the filter, at
+ * the distance of the brute-force result of its rank (ties may come in any order).
+ * @param {any} t
+ * @param {Map<number, number[]>} live
+ * @param {number} x
+ * @param {number} y
+ * @param {number} k
+ * @param {number} maxD
+ * @param {(id: number, ...box: number[]) => boolean} [filter]
+ */
+function checkNeighbors(t, live, x, y, k, maxD, filter) {
+    const dist = (b) => {
+        const dx = Math.max(b[0] - x, x - b[2], 0), dy = Math.max(b[1] - y, y - b[3], 0);
+        return dx * dx + dy * dy;
+    };
+    const got = t.neighbors(x, y, k, maxD, filter);
+    const all = [];
+    for (const [id, b] of live) {
+        const d = dist(b);
+        if (d <= maxD * maxD && (!filter || filter(id, ...b))) all.push(d);
+    }
+    all.sort((a, b) => a - b);
+    const n = Math.min(k, all.length), seen = new Set();
+    if (got.length !== n) throw new Error(`neighbors: ${got.length} results instead of ${n} (k ${k}, max ${maxD})`);
+    for (let i = 0; i < n; i++) {
+        const id = got[i], b = live.get(id);
+        if (!b || seen.has(id) || (filter && !filter(id, ...b))) throw new Error('neighbors: wrong item');
+        if (dist(b) !== all[i]) throw new Error(`neighbors: rank ${i} at ${dist(b)} instead of ${all[i]}`);
+        seen.add(id);
+    }
+}
+
 for (let seed = 1; seed <= 12; seed++) {
     const rnd = mulberry32(seed);
     const t = new HTree();
@@ -172,6 +205,16 @@ for (let seed = 1; seed <= 12; seed++) {
 
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
+        // neighbors settles the tree itself: on every other checkpoint, before the state checks and searches do
+        const sp = spread, knn = () => {
+            for (let q = 0; q < 4; q++) {
+                const x = 500 + (rnd() - 0.5) * sp, y = 500 + (rnd() - 0.5) * sp;
+                const k = [1, 5, 40, Infinity][q], maxD = rnd() < 0.5 ? Infinity : rnd() * sp / 10;
+                checkNeighbors(t, live, x, y, k, maxD, rnd() < 0.3 ? id => id % 3 !== 0 : undefined);
+            }
+        };
+        if (op % 422 === 211) knn();
+
         check(t, live, false);
         const packs = t._pending && t.size > M;
         if (!t._pending) {
@@ -188,10 +231,16 @@ for (let seed = 1; seed <= 12; seed++) {
             const y0 = q === 0 ? -Infinity : qy;
             const x1 = qx + qs, y1 = qy + qs;
 
-            const got = t.search(x0, y0, x1, y1).sort((a, b) => a - b);
+            // query 3 filters, and its filter has to see the item's box
+            const filter = q === 3 ? (id, a, b, c, d) => {
+                const o = live.get(id);
+                if (a !== o[0] || b !== o[1] || c !== o[2] || d !== o[3]) throw new Error('filter got a wrong box');
+                return id % 3 !== 0;
+            } : undefined;
+            const got = t.search(x0, y0, x1, y1, filter).sort((a, b) => a - b);
             const expected = [];
             for (const [id, b] of live) {
-                if (x1 >= b[0] && y1 >= b[1] && x0 <= b[2] && y0 <= b[3]) expected.push(id);
+                if (x1 >= b[0] && y1 >= b[1] && x0 <= b[2] && y0 <= b[3] && (q !== 3 || id % 3 !== 0)) expected.push(id);
             }
             expected.sort((a, b) => a - b);
 
@@ -200,6 +249,7 @@ for (let seed = 1; seed <= 12; seed++) {
             }
             if (q === 0 && packs) check(t, live, true, true);
         }
+        if (op % 422 !== 211) knn();
     }
 
     while (ids.length) {
@@ -508,4 +558,52 @@ function verify(t, live, rnd, lo, hi) {
         if (t._pending || t._side > 100) throw new Error(`pending bounds kept stale positions (${t._side})`);
     }
     console.log('domain ok');
+}
+
+// neighbors: small pending trees, bad arguments, boxes at infinity or with NaN (left out: they have no order), ties,
+// and a large tree with updates pending
+{
+    const rnd = mulberry32(9);
+    const t = new HTree(), live = new Map();
+    const add = b => live.set(t.add(b[0], b[1], b[2], b[3]), b);
+    if (t.neighbors(0, 0).length !== 0) throw new Error('neighbors in an empty tree');
+    for (let i = 0; i < 16; i++) {
+        add([i, i, i + 1, i + 1]);
+        checkNeighbors(t, live, 3.5, 2, Infinity, Infinity);
+        checkNeighbors(t, live, 3.5, 2, 1, 2);
+    }
+    if (!t._pending) throw new Error('16 items not pending');
+    for (const [k, d] of [[0, 1], [-1, 1], [NaN, 1], [1, -1], [5, NaN]]) {
+        if (t.neighbors(0, 0, k, d).length !== 0) throw new Error(`neighbors with k ${k}, max ${d}`);
+    }
+    if (t.neighbors(0.5, 0.5, 3, 0).length !== 1) throw new Error('max distance 0 misses the box under the point');
+
+    for (let i = 0; i < 20; i++) add([5, 5, 5, 5]); // ties
+    add([Infinity, 0, Infinity, 0]);
+    add([-Infinity, -Infinity, Infinity, Infinity]);
+    const nan = t.add(NaN, 0, NaN, 0);
+    for (const k of [1, 3, 30, Infinity]) checkNeighbors(t, live, 5, 6, k, Infinity);
+    if (t.neighbors(1e9, 1e9).includes(nan)) throw new Error('NaN box in neighbors');
+    t.remove(nan);
+
+    for (let i = 0; i < 20000; i++) {
+        const x = rnd() * 1000, y = rnd() * 1000;
+        add([x, y, x + rnd() * 3, y + rnd() * 3]);
+    }
+    t.search(0, 0, 0, 0);
+    for (let f = 0; f < 5; f++) {
+        for (let i = 0; i < 2000; i++) {
+            const id = Math.floor(rnd() * live.size), o = live.get(id);
+            if (!o || !(o[2] - o[0] < 10)) continue; // not the boxes at infinity
+            const dx = rnd() * 40 - 20, dy = rnd() * 40 - 20, b = [o[0] + dx, o[1] + dy, o[2] + dx, o[3] + dy];
+            t.update(id, b[0], b[1], b[2], b[3]);
+            live.set(id, b);
+        }
+        for (let q = 0; q < 20; q++) {
+            const x = rnd() * 1200 - 100, y = rnd() * 1200 - 100, filter = q % 2 ? id => id % 5 === 0 : undefined;
+            checkNeighbors(t, live, x, y, [1, 2, 10, 100][q % 4], q % 3 ? Infinity : rnd() * 30, filter);
+        }
+        check(t, live, true);
+    }
+    console.log('neighbors ok');
 }

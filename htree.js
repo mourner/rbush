@@ -87,6 +87,11 @@ export default class HTree {
         this._movedIds = new Uint32Array(64);
         this._movedBoxes = new Float64Array(128);
 
+        // neighbors: a binary min-heap of nodes and items by squared distance, kept between calls
+        this._heapIds = new Uint32Array(64);
+        this._heapDists = new Float64Array(64);
+        this._heapSize = 0;
+
         this._height = 1;
         this._path = new Uint32Array(16);                     // level → slot taken by the last _insert descent
         this._splitKey = 0;                                   // largest key left in the lower half by _splitLeaf
@@ -224,16 +229,18 @@ export default class HTree {
      * @param {number} minY
      * @param {number} maxX
      * @param {number} maxY
+     * @param {(id: number, minX: number, minY: number, maxX: number, maxY: number) => boolean} [filterFn] only
+     * items for which it returns true are included
+     * @returns {number[]}
      */
-    search(minX, minY, maxX, maxY) {
+    search(minX, minY, maxX, maxY, filterFn) {
         // infinite query bounds would match the sentinel boxes in unused slots
         minX = Math.max(minX, -Number.MAX_VALUE);
         minY = Math.max(minY, -Number.MAX_VALUE);
         maxX = Math.min(maxX, Number.MAX_VALUE);
         maxY = Math.min(maxY, Number.MAX_VALUE);
 
-        if (this._pending && this.size > M) this.rebuild();
-        else if (this._numDirty > 0) this._flush();
+        this._settle();
 
         const boxes = this._boxes, ptrs = this._ptrs;
         const results = [], queue = [];
@@ -251,7 +258,8 @@ export default class HTree {
 
                 const ptr = ptrs[pos >> 2];
                 if (level > 0) queue.push(ptr * 16 + level - 1); // child node and its level in one number
-                else results.push(ptr);
+                else if (filterFn === undefined ||
+                    filterFn(ptr, boxes[pos], boxes[pos + 1], boxes[pos + 2], boxes[pos + 3])) results.push(ptr);
             }
 
             if (queue.length === 0) break;
@@ -261,6 +269,116 @@ export default class HTree {
         }
 
         return results;
+    }
+
+    /**
+     * Find the ids of the items nearest to a point, closest first, by the distance to their boxes (0 inside).
+     * @param {number} x
+     * @param {number} y
+     * @param {number} [maxResults=Infinity]
+     * @param {number} [maxDistance=Infinity] items farther than this are left out
+     * @param {(id: number, minX: number, minY: number, maxX: number, maxY: number) => boolean} [filterFn] only
+     * items for which it returns true are included (and count towards maxResults)
+     * @returns {number[]}
+     */
+    neighbors(x, y, maxResults = Infinity, maxDistance = Infinity, filterFn) {
+        const results = [];
+        if (!(maxResults > 0 && maxDistance >= 0)) return results;
+        this._settle();
+
+        const boxes = this._boxes, ptrs = this._ptrs, count = this._count;
+        // for one result, the best item so far stays out of the heap and its distance prunes the search
+        const one = maxResults === 1;
+        let bound = maxDistance * maxDistance, nearest = -1;
+        let node = this._root, level = this._height - 1;
+        this._heapSize = 0;
+
+        while (true) {
+            // slots past the count are padding, whose infinite distance would pass an infinite bound; a pending
+            // root leaf doesn't keep its count
+            const start = node * M, end = start + (this._pending ? this.size : count[node]);
+            for (let s = start; s < end; s++) {
+                const p = s * 4, minX = boxes[p], minY = boxes[p + 1], maxX = boxes[p + 2], maxY = boxes[p + 3];
+                const dx = Math.max(minX - x, x - maxX, 0), dy = Math.max(minY - y, y - maxY, 0);
+                const dist = dx * dx + dy * dy, ptr = ptrs[s];
+
+                // heap entries: a node and its level as (node · 16 + level) · 2, an item as id · 2 + 1. An item
+                // with a NaN distance is left out (it has no place in the order), but a node's MBR is NaN if any
+                // box below is, and the others still count: such a node goes in at distance 0.
+                if (level > 0) {
+                    if (dist > bound) continue;
+                    this._heapPush((ptr * 16 + level - 1) * 2, dist || 0);
+                } else if (dist <= bound && (filterFn === undefined || filterFn(ptr, minX, minY, maxX, maxY))) {
+                    if (!one) this._heapPush(ptr * 2 + 1, dist);
+                    else {
+                        nearest = ptr;
+                        bound = dist;
+                    }
+                }
+            }
+
+            // items come off the heap in distance order up to the first node, which may hold closer ones
+            const heap = this._heapIds;
+            while (this._heapSize > 0 && heap[0] & 1) {
+                results.push(heap[0] >>> 1);
+                if (results.length >= maxResults) return results;
+                this._heapPop();
+            }
+            if (this._heapSize === 0 || (nearest !== -1 && this._heapDists[0] >= bound)) break;
+            const next = heap[0] >>> 1;
+            this._heapPop();
+            node = next >>> 4;
+            level = next & 15;
+        }
+
+        if (nearest !== -1) results.push(nearest);
+        return results;
+    }
+
+    /**
+     * @param {number} id
+     * @param {number} dist
+     */
+    _heapPush(id, dist) {
+        if (this._heapSize === this._heapIds.length) {
+            this._heapIds = grow(this._heapIds, this._heapSize * 2);
+            this._heapDists = grow(this._heapDists, this._heapSize * 2);
+        }
+        const ids = this._heapIds, dists = this._heapDists;
+        let i = this._heapSize++;
+        while (i > 0) {
+            const up = (i - 1) >> 1, d = dists[up];
+            if (dist >= d) break;
+            ids[i] = ids[up];
+            dists[i] = d;
+            i = up;
+        }
+        ids[i] = id;
+        dists[i] = dist;
+    }
+
+    /** Take the top entry off the heap. */
+    _heapPop() {
+        const ids = this._heapIds, dists = this._heapDists, n = --this._heapSize;
+        if (n === 0) return;
+        const id = ids[n], dist = dists[n], half = n >> 1;
+        let i = 0;
+        while (i < half) {
+            let c = 2 * i + 1;
+            if (c + 1 < n && dists[c + 1] < dists[c]) c++;
+            if (dists[c] >= dist) break;
+            ids[i] = ids[c];
+            dists[i] = dists[c];
+            i = c;
+        }
+        ids[i] = id;
+        dists[i] = dist;
+    }
+
+    /** Before a query: pack a pending tree that holds more than one leaf, or flush updates. */
+    _settle() {
+        if (this._pending && this.size > M) this.rebuild();
+        else if (this._numDirty > 0) this._flush();
     }
 
     /**
