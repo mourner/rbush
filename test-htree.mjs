@@ -79,9 +79,13 @@ function check(t, live, exact, packed = false) {
         return [minX, minY, maxX, maxY, maxKey];
     };
 
-    visit(t._root, t._height - 1, -Infinity);
-    if (t._pending && (items !== 0 || t._root !== 0 || t._numNodes !== 1)) throw new Error('pending tree with nodes');
-    for (let s = M, end = t._pending ? M + t.size : M; s < end; s++) {
+    if (!t._pending) visit(t._root, t._height - 1, -Infinity);
+    else if (t._root !== 0 || t._numNodes !== 1 || t._height !== 1) throw new Error('pending tree with nodes');
+    if (!t._pending && t._height === 1) throw new Error('built tree of one leaf');
+    for (let s = t._pending ? t.size : M; s < M; s++) {
+        if (boxes[s * 4] !== Infinity || boxes[s * 4 + 2] !== -Infinity) throw new Error('unpadded pending slot');
+    }
+    for (let s = 0, end = t._pending ? t.size : 0; s < end; s++) {
         const id = ptrs[s], b = live.get(id), p = s * 4;
         items++;
         if (t._slotOf[id] !== s) throw new Error('pending slotOf mismatch');
@@ -98,10 +102,10 @@ function check(t, live, exact, packed = false) {
     if (free.size + live.size !== t._nextId) throw new Error('removed ids missing from the free list');
     for (let id = t._nextId; id < t._slotOf.length; id++) if (t._slotOf[id] !== DEAD) throw new Error('unissued id not DEAD');
 
-    if (t.size === 0 && (!t._pending || t._height !== 1 || t._count[t._root] !== 0)) throw new Error('empty tree not reset');
+    if (t.size === 0 && !t._pending) throw new Error('empty tree not reset');
 
     if (exact) {
-        if (t._pending) throw new Error('exact check in pending mode');
+        if (t._pending && t.size > M) throw new Error('exact check in pending mode');
         if (t._numDirty !== 0) throw new Error('dirty list not empty');
         for (let i = 0; i < t._numNodes; i++) if (t._dirty[i] !== 0) throw new Error('node left dirty');
     }
@@ -162,14 +166,14 @@ for (let seed = 1; seed <= 12; seed++) {
 
         if (rnd() < 1 / 700) { // with in-place updates likely pending
             t.rebuild();
-            check(t, live, t.size > 0, t.size > 0);
+            check(t, live, t.size > M, t.size > M);
             rebuilds++;
         }
 
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
         check(t, live, false);
-        const packs = t._pending && t.size > 0;
+        const packs = t._pending && t.size > M;
         if (!t._pending) {
             t._flush();
             check(t, live, true);
@@ -384,8 +388,9 @@ function verify(t, live, rnd, lo, hi) {
 
 // Domain growth maps every stored key to exactly the key its box gets in the grown domain, as long as the float math
 // is exact: here the domain is held at dyadic bounds (rebuild and root splits don't refit it) and items sit at cell
-// centers. Growth comes from adds and from updates through the flush, in all directions from every orientation, by
-// up to 2^30, so also past the 16 doublings after which old keys collapse into one.
+// centers. Growth comes from adds and from updates through the flush, in all directions, by up to 2^30, so
+// also past the 8 steps after which old keys collapse into one. An updated item that stayed in its leaf may keep its
+// old key (see _evict), so it's skipped from then on unless the update grew the domain, which always takes it out.
 {
     const rnd = mulberry32(11);
     let grown = 0;
@@ -394,9 +399,8 @@ function verify(t, live, rnd, lo, hi) {
         t._pending = false;
         t._setDomain = () => {};
         Object.assign(t, {_minX: 0, _minY: 0, _side: 1024, _scale: 64});
-        t._setOrient(round % 4);
 
-        const live = new Map(), ids = [];
+        const live = new Map(), ids = [], kept = new Set();
         const cell = () => (Math.floor(rnd() * 65536) + 0.5) / 64;
         const far = () => (rnd() < 0.5 ? -1 : 1) * 1024 * 2 ** Math.floor(rnd() * (round < 12 ? 4 : 30)) + cell();
         const add = (x, y) => {
@@ -415,10 +419,13 @@ function verify(t, live, rnd, lo, hi) {
                 t.update(id, x, y);
                 live.set(id, [x, y, x, y]);
                 t.search(0, 0, 0, 0);
+                if (t._side === side) kept.add(id);
+                else kept.delete(id);
             }
             if (t._side !== side) grown++;
             check(t, live, true);
             for (const [id, b] of live) {
+                if (kept.has(id)) continue;
                 if (t._keys[t._slotOf[id]] !== t._key(b[0], b[1], b[2], b[3])) throw new Error(`key not exact after growth (round ${round})`);
             }
         }
@@ -427,15 +434,17 @@ function verify(t, live, rnd, lo, hi) {
 }
 
 // Degenerate starting domains: all centers in one point (at 0 and far from it), a few points, centers that aren't
-// finite and huge coordinates; then data that spreads far beyond. Also a sweep in x, which doubles the domain over
+// finite and huge coordinates; then data that spreads far beyond. Also a sweep in x, which grows the domain over
 // and over while the tree grows.
 {
     const rnd = mulberry32(5);
     const run = (name, first, then, lazy) => {
         const t = new HTree(), live = new Map();
-        if (!lazy) t._pending = false;
         const add = b => live.set(t.add(b[0], b[1], b[2], b[3]), b);
-        for (const b of first) add(b);
+        for (const b of first) {
+            add(b);
+            if (!lazy) t.search(0, 0, 0, 0);
+        }
         t.search(0, 0, 0, 0);
         for (const b of then) add(b);
         let lo = Infinity, hi = -Infinity;

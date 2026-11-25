@@ -8,11 +8,11 @@
 // and MAX_KEY, so search scans every node at full width with no counts.
 //
 // An update only writes the box and marks the leaf: before the next search, a flush takes the items that left their
-// leaves out and inserts them again, and refits the entries above. While the tree is empty, adds only fill a run of
-// slots past the root, and the first search packs them with rebuild.
+// leaves out and inserts them again, and refits the entries above. A tree that hasn't been built yet is pending: adds
+// only fill a run of slots, and the first search that finds more than one node of them packs them with rebuild.
 //
 // Keys come from a square domain that follows the data: rebuild fits it to the item centers, and an item centered
-// outside it doubles it (see _grow), which rewrites the stored keys in place rather than re-keying from the boxes.
+// outside it grows it (see _grow), which rewrites the stored keys in place rather than re-keying from the boxes.
 //
 // Not hardened yet: internal nodes are never merged on underflow, and the arena grows by doubling.
 
@@ -21,10 +21,6 @@ const HALF = M / 2;
 
 const HILBERT_MAX = (1 << 16) - 1;
 const CELLS = HILBERT_MAX + 1; // grid cells per axis of the domain
-
-// _grow: for orientation o and the quadrant q = qx + 2·qy that the old domain takes in the doubled one, the new
-// orientation << 2 | the quadrant's top Hilbert digit
-const GROW = [4, 15, 1, 2, 0, 5, 11, 6, 10, 9, 7, 12, 14, 3, 13, 8];
 
 // Keys are the 32-bit Hilbert code shifted to 31 bits, in [-2^30, 2^30): every key is an SMI even with pointer
 // compression, and a difference of two keys fits an int32, so its sign bit is the comparison.
@@ -52,15 +48,11 @@ export default class HTree {
 
         // the Hilbert domain: a square of `side` from (minX, minY), with CELLS cells per axis rather than CELLS − 1
         // so that each half of it maps exactly to a half of the grid at every level (the max edge clamps into the
-        // last cell), and the curve's orientation in it (see _grow) as masks for _key; set by rebuild and by the
-        // first split of a root leaf (a root leaf doesn't need keys: nothing orders it against other leaves)
+        // last cell); set by rebuild (a pending tree has no keys)
         this._minX = 0;
         this._minY = 0;
         this._side = 0;
         this._scale = 0;
-        this._orient = 0;
-        this._flip = 0;  // 0xffff: (x, y) → (m − x, m − y)
-        this._swap = 0;  // -1: (x, y) → (y, x), after the flip
         // bounds of the centers the domain has yet to cover: those of pending items (rebuild fits the domain to
         // them), or of the items _evict found outside the domain (_flush grows it to them)
         this._outX0 = Infinity;
@@ -99,8 +91,9 @@ export default class HTree {
         this._splitKey = 0;                                   // largest key left in the lower half by _splitLeaf
         this._root = this._alloc();
 
-        // an empty tree is pending: its root is node 0, and added items fill the slots right after it (item i of
-        // `size` in slot M + i, no keys) until the first search packs them
+        // a new tree is pending: item i of `size` is in slot i, with no keys and nothing above. Up to M items are
+        // the root leaf at node 0 (padded past the last one), which search scans as is; more run on into the slots
+        // after it, and the next search packs them. A rebuild that finds M items or fewer leaves the tree pending.
         this._pending = true;
     }
 
@@ -121,7 +114,7 @@ export default class HTree {
         }
 
         if (this._pending) {
-            const s = M + this.size, p = s * 4;
+            const s = this.size, p = s * 4;
             if (s === this._capacity * M) this._growArena();
             const boxes = this._boxes;
             boxes[p] = minX;
@@ -132,13 +125,9 @@ export default class HTree {
             this._slotOf[id] = s;
             this._extendOut(minX, minY, maxX, maxY);
         } else {
-            let key = 0;
-            if (this._height > 1) {
-                const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-                if (this._outside(cx, cy)) this._grow(cx, cy, cx, cy);
-                key = this._key(minX, minY, maxX, maxY);
-            }
-            this._insert(id, key, minX, minY, maxX, maxY);
+            const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+            if (this._outside(cx, cy)) this._grow(cx, cy, cx, cy);
+            this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
         }
         this.size++;
         return id;
@@ -151,11 +140,12 @@ export default class HTree {
     remove(id) {
         const slotOf = this._slotOf, s = this._slot(id);
         if (this._pending) { // the last pending item takes its slot
-            const last = M + this.size - 1;
+            const last = this.size - 1;
             if (s !== last) {
                 slotOf[this._ptrs[last]] = s;
                 this._copy(last, s);
             }
+            this._pad(last, last + 1);
         } else {
             const leaf = Math.floor(s / M);
             this._take(s);
@@ -191,7 +181,7 @@ export default class HTree {
         }
 
         const leaf = Math.floor(s / M);
-        if (leaf !== this._root && this._dirty[leaf] === 0) { // a root leaf has nothing above and nowhere else to go
+        if (this._dirty[leaf] === 0) {
             this._dirty[leaf] = 1;
             if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
             this._dirtyList[this._numDirty++] = leaf;
@@ -240,7 +230,7 @@ export default class HTree {
         maxX = Math.min(maxX, Number.MAX_VALUE);
         maxY = Math.min(maxY, Number.MAX_VALUE);
 
-        if (this._pending && this.size > 0) this.rebuild();
+        if (this._pending && this.size > M) this.rebuild();
         else if (this._numDirty > 0) this._flush();
 
         const boxes = this._boxes, ptrs = this._ptrs;
@@ -288,8 +278,8 @@ export default class HTree {
         const ids = new Uint32Array(buf, 0, n), cols = new Float64Array(buf, n * 8, n * 2);
 
         // a pending tree has the bounds of its centers already; other trees get keys from the current domain, along
-        // with the bounds of the centers (doubled), and only if the domain doesn't fit them is it fitted and are the
-        // keys computed again, which reads every box a second time
+        // with the bounds of the finite centers (doubled), and only if the domain doesn't fit them is it fitted and
+        // are the keys computed again, which reads every box a second time
         if (this._pending) this._fitOut();
         let boxes = this._boxes, m = n * 4, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         // walk the leaves rather than the ids: one cache miss per leaf instead of one per item
@@ -303,21 +293,27 @@ export default class HTree {
             }
             for (let s = start; s < end; s++, m++) {
                 const p = s * 4, a = boxes[p], b = boxes[p + 1], c = boxes[p + 2], d = boxes[p + 3];
+                const cx = a + c, cy = b + d;
                 sortKeys[m] = this._key(a, b, c, d);
                 from[m] = s;
-                x0 = Math.min(x0, a + c);
-                y0 = Math.min(y0, b + d);
-                x1 = Math.max(x1, a + c);
-                y1 = Math.max(y1, b + d);
+                if (cx - cx !== 0 || cy - cy !== 0) continue;
+                x0 = Math.min(x0, cx);
+                y0 = Math.min(y0, cy);
+                x1 = Math.max(x1, cx);
+                y1 = Math.max(y1, cy);
             }
         }
-        for (let s = M; m < n * 5; s++, m++) { // a pending tree: the run of slots past the root
+        for (let s = 0; m < n * 5; s++, m++) { // a pending tree: the run of slots from the start
             const p = s * 4;
             sortKeys[m] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
             from[m] = s;
         }
-        if (!this._pending && n > 0 && !(x0 - x1 + y0 - y1 > -Infinity && this._fits(x0 / 2, y0 / 2, x1 / 2, y1 / 2))) {
-            this._refitDomain(sortKeys, from, n * 4, n * 5);
+        if (!this._pending && n > 0 && !this._fits(x0 / 2, y0 / 2, x1 / 2, y1 / 2)) {
+            this._setDomain(x0 / 2, y0 / 2, x1 / 2, y1 / 2);
+            for (let i = n * 4; i < n * 5; i++) {
+                const p = from[i] * 4;
+                sortKeys[i] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
+            }
         }
         if (n > 0) radixSort(sortKeys, from, n * 4, 0, n);
 
@@ -391,7 +387,10 @@ export default class HTree {
 
         // after a bulk build, free the scratch: a tree that is rebuilt again gets it back and keeps it from then on
         if (this._pending || n === 0) this._scratch = new ArrayBuffer(0);
-        this._pending = n === 0;
+        this._pending = n <= M;
+        if (this._pending) { // one leaf: the bounds of its centers are for the rebuild that packs what's added to it
+            for (let p = 0; p < n * 4; p += 4) this._extendOut(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
+        }
     }
 
     /**
@@ -407,7 +406,7 @@ export default class HTree {
 
     /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
     bytes() {
-        const nodes = this._pending ? 1 + Math.ceil(this.size / M) : this._numNodes;
+        const nodes = this._pending ? Math.ceil(this.size / M) || 1 : this._numNodes;
         return nodes * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
     }
 
@@ -461,7 +460,6 @@ export default class HTree {
                 this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
                 return;
             }
-            if (this._height === 1) key = this._fitRoot(minX, minY, maxX, maxY);
             sibling = this._splitLeaf(node);
             if (key > this._splitKey) leaf = sibling;
         }
@@ -719,7 +717,6 @@ export default class HTree {
     _merge(leaf) {
         const count = this._count, ptrs = this._ptrs, n = count[leaf];
         if (n > 0) {
-            if (leaf === this._root) return false;
             const e = this._entryOf(leaf), first = this._parent[leaf] * M, last = first + count[this._parent[leaf]] - 1;
 
             let t = -1, room = MERGE_MAX - n;
@@ -823,10 +820,9 @@ export default class HTree {
      */
     _key(minX, minY, maxX, maxY) {
         // clamp as floats before `| 0`: out-of-range values would wrap around int32
-        const x = (clamp(this._scale * ((minX + maxX) / 2 - this._minX)) | 0) ^ this._flip;
-        const y = (clamp(this._scale * ((minY + maxY) / 2 - this._minY)) | 0) ^ this._flip;
-        const d = (x ^ y) & this._swap;
-        return hilbert(x ^ d, y ^ d) >> 1;
+        const x = clamp(this._scale * ((minX + maxX) / 2 - this._minX)) | 0;
+        const y = clamp(this._scale * ((minY + maxY) / 2 - this._minY)) | 0;
+        return hilbert(x, y) >> 1;
     }
 
     /**
@@ -863,8 +859,19 @@ export default class HTree {
      * @param {number} cy
      */
     _outside(cx, cy) {
-        const x = this._scale * (cx - this._minX), y = this._scale * (cy - this._minY);
-        return (x < 0 || x >= CELLS || y < 0 || y >= CELLS) && cx - cx === 0 && cy - cy === 0;
+        return !this._covers(cx, cy, cx, cy) && cx - cx === 0 && cy - cy === 0;
+    }
+
+    /**
+     * Whether the domain covers the given bounds of item centers, by the same arithmetic that makes their grid cells.
+     * @param {number} x0
+     * @param {number} y0
+     * @param {number} x1
+     * @param {number} y1
+     */
+    _covers(x0, y0, x1, y1) {
+        const scale = this._scale, x = this._minX, y = this._minY;
+        return (x0 - x) * scale >= 0 && (y0 - y) * scale >= 0 && (x1 - x) * scale < CELLS && (y1 - y) * scale < CELLS;
     }
 
     /**
@@ -881,111 +888,49 @@ export default class HTree {
         this._minY = y0 / 2 + y1 / 2 - side / 2;
         this._side = side;
         this._scale = CELLS / side;
-        this._setOrient(0);
-    }
-
-    /**
-     * Fit the domain to the items in slots from[a .. b) and key them into sortKeys[a .. b).
-     * @param {Int32Array} sortKeys
-     * @param {Uint32Array} from
-     * @param {number} a
-     * @param {number} b
-     */
-    _refitDomain(sortKeys, from, a, b) {
-        const boxes = this._boxes;
-        for (let i = a; i < b; i++) {
-            const p = from[i] * 4;
-            this._extendOut(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
-        }
-        this._fitOut();
-        for (let i = a; i < b; i++) {
-            const p = from[i] * 4;
-            sortKeys[i] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
-        }
     }
 
     /**
      * Whether the domain covers the given bounds of item centers and is at most 1/8 larger than _setDomain would make
-     * it: rebuild keeps such a domain. One that's twice as large (after a doubling) costs a packed tree up to a tenth
-     * more nodes visited by a query, as the data takes an odd part of the curve.
+     * it: rebuild keeps such a domain. One that's twice as large costs a packed tree up to a tenth more nodes visited
+     * by a query, as the data takes an odd part of the curve.
      * @param {number} x0
      * @param {number} y0
      * @param {number} x1
      * @param {number} y1
      */
     _fits(x0, y0, x1, y1) {
-        const scale = this._scale, x = this._minX, y = this._minY;
-        return (x0 - x) * scale >= 0 && (y0 - y) * scale >= 0 && (x1 - x) * scale < CELLS && (y1 - y) * scale < CELLS &&
-            this._side <= 1.125 * fitSide(x0, y0, x1, y1);
-    }
-
-    /** @param {number} o */
-    _setOrient(o) {
-        this._orient = o;
-        this._flip = o & 2 ? HILBERT_MAX : 0;
-        this._swap = -(o & 1);
+        return this._covers(x0, y0, x1, y1) && this._side <= 1.125 * fitSide(x0, y0, x1, y1);
     }
 
     /**
-     * Fit the domain to the items of a full root leaf and to the box about to split it, and re-key the items;
-     * returns the key of the box.
-     * @param {number} minX
-     * @param {number} minY
-     * @param {number} maxX
-     * @param {number} maxY
-     */
-    _fitRoot(minX, minY, maxX, maxY) {
-        const boxes = this._boxes, base = this._root * M;
-        this._extendOut(minX, minY, maxX, maxY); // the out bounds are empty outside pending mode and _flush's refit
-        for (let s = base; s < base + M; s++) {
-            const p = s * 4;
-            this._extendOut(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
-        }
-        this._fitOut();
-        for (let s = base; s < base + M; s++) {
-            const p = s * 4;
-            this._keys[s] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
-        }
-        return this._key(minX, minY, maxX, maxY);
-    }
-
-    /**
-     * Double the domain until it covers the given bounds of item centers, each time so that the old domain is one
-     * aligned quadrant of the new one, the one away from the bounds. The curve in that quadrant is the old curve
-     * under one of four orientations, and it's always the first, second, third or fourth quarter of the new curve,
-     * so an old key maps to the new one by putting that quarter's digit on top and shifting the rest down. That's
+     * Grow the domain until it covers the given bounds of item centers, 4 times per axis at a step, with the old
+     * domain as the corner cell of a 4 × 4 grid over the new one that's away from the bounds. The Hilbert curve passes
+     * each corner cell of that grid unrotated (unlike the quadrants of a 2 × 2 one), as its sixteenth number 0, 5, 10
+     * or 15, so an old key maps to the new one by putting that digit on top and shifting the rest down. That's
      * monotone: the stored keys are rewritten in one pass, the tree stays ordered and nothing is re-keyed from the
-     * boxes. Each doubling takes a bit per axis off the resolution of the keys written before it (until a rebuild);
-     * after 16 they all collapse into one.
+     * boxes. Each step takes 2 bits per axis off the resolution of the keys written before it (until a rebuild);
+     * after 8 they all collapse into one.
      * @param {number} x0
      * @param {number} y0
      * @param {number} x1
      * @param {number} y1
      */
     _grow(x0, y0, x1, y1) {
-        let minX = this._minX, minY = this._minY, side = this._side, o = this._orient, top = 0, shift = 0;
-        while (true) {
-            const scale = CELLS / side, left = (x0 - minX) * scale < 0, below = (y0 - minY) * scale < 0;
-            if (!left && !below && (x1 - minX) * scale < CELLS && (y1 - minY) * scale < CELLS) break;
+        let top = 0, shift = 0;
+        while (!this._covers(x0, y0, x1, y1)) {
+            const side = this._side, left = x0 < this._minX, below = y0 < this._minY;
+            const minX = left ? this._minX - 3 * side : this._minX, minY = below ? this._minY - 3 * side : this._minY;
+            if (!(Math.abs(minX) + Math.abs(minY) + 4 * side < Infinity)) break; // the rest clamps
 
-            const nx = left ? minX - side : minX, ny = below ? minY - side : minY;
-            if (!(Math.abs(nx) + Math.abs(ny) + 2 * side < Infinity)) break; // the rest clamps
-
-            const t = GROW[o * 4 + (below ? 2 : 0) + (left ? 1 : 0)];
-            o = t >> 2;
-            top = ((t & 3) << 29) | (top >>> 2); // the digits so far, on top of the 31-bit key
-            shift = Math.min(shift + 2, 31);      // the old key is < 2^31: shifting by 31 leaves nothing
-            minX = nx;
-            minY = ny;
-            side *= 2;
+            top = (((left ? 15 : 0) ^ (below ? 5 : 0)) << 27) | (top >>> 4); // the digits so far, on top of the 31-bit key
+            shift = Math.min(shift + 4, 31); // the old key is < 2^31: shifting by 31 leaves nothing
+            this._minX = minX;
+            this._minY = minY;
+            this._side = side * 4;
+            this._scale = CELLS / this._side;
         }
         if (shift === 0) return;
-
-        this._minX = minX;
-        this._minY = minY;
-        this._side = side;
-        this._scale = CELLS / side;
-        this._setOrient(o);
 
         // used slots only: padding keeps MAX_KEY, while an item can have MAX_KEY as a real key
         const keys = this._keys, count = this._count, BIAS = MAX_KEY + 1;
@@ -1069,8 +1014,8 @@ function packedNodes(n) {
 
 /**
  * Side of a square domain for the given bounds of item centers: a margin of 1/8 of the side all around, so that items
- * at the edge don't double it as soon as they move. Centers all in one point still get a side, one that keeps cells
- * well above float resolution at their magnitude, so that doubling stays exact for a while (the domain only grows).
+ * at the edge don't grow it as soon as they move. Centers all in one point still get a side, one that keeps cells
+ * well above float resolution at their magnitude, so that growing stays exact for a while (the domain only grows).
  * @param {number} x0
  * @param {number} y0
  * @param {number} x1
