@@ -307,7 +307,7 @@ export default class HTree {
                 // box below is, and the others still count: such a node goes in at distance 0.
                 if (level > 0) {
                     if (dist > bound) continue;
-                    this._heapPush((ptr * 16 + level - 1) * 2, dist || 0);
+                    this._heapPush((ptr * 16 + level - 1) * 2, dist >= 0 ? dist : 0);
                 } else if (dist <= bound && (filterFn === undefined || filterFn(ptr, minX, minY, maxX, maxY))) {
                     if (!one) this._heapPush(ptr * 2 + 1, dist);
                     else {
@@ -365,7 +365,7 @@ export default class HTree {
         let i = 0;
         while (i < half) {
             let c = 2 * i + 1;
-            if (c + 1 < n && dists[c + 1] < dists[c]) c++;
+            c += +(c + 1 < n) & +(dists[c + 1] < dists[c]); // branchless: the pick is unpredictable
             if (dists[c] >= dist) break;
             ids[i] = ids[c];
             dists[i] = dists[c];
