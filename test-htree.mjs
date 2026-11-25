@@ -1,8 +1,9 @@
 // Seeded fuzz: random add / remove / update (jitter + teleport) against brute force, plus white-box invariants
-// (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order). Before a lazy refit,
-// entries above leaves updated in place may be stale, but max keys must still be upper bounds and in order.
-// rebuild() runs at random points, and over a range of sizes around node and sort-path boundaries. Pending mode
-// (automatic while empty, or by toggle) runs stretches of writes that the next search packs.
+// (padded unused slots, slotOf and parent links, tight MBRs, exact max keys, key order). Before a flush, the
+// entries of leaves marked by updates may be stale (max keys still upper bounds and in order); all others must be
+// exact, as must every internal node's entry relative to the entries in the node. rebuild() runs at random points,
+// and over a range of sizes around node boundaries; each tree starts pending, and again after draining to empty.
+// Directed cases at the end cover what the fuzz can't see: items that moved away must not stay in their leaf.
 import HTree from './htree.js';
 
 const M = 16;
@@ -34,7 +35,7 @@ function check(t, live, exact, packed = false) {
     // returns the node's actual [minX, minY, maxX, maxY, maxKey]
     const visit = (node, level, loKey) => {
         const n = t._count[node];
-        if (node !== t._root && n === 0 && !t._pending) throw new Error('empty non-root node');
+        if (node !== t._root && n === 0) throw new Error('empty non-root node');
         if (packed && n > FILL && node !== t._root) throw new Error('packed node over FILL');
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxKey = -Infinity, prev = loKey;
@@ -58,8 +59,9 @@ function check(t, live, exact, packed = false) {
                 const child = ptrs[s];
                 if (t._parent[child] !== node) throw new Error('parent mismatch');
                 const r = visit(child, level - 1, prev);
-                if (exact && (r[0] !== boxes[p] || r[1] !== boxes[p + 1] || r[2] !== boxes[p + 2] || r[3] !== boxes[p + 3])) throw new Error('MBR not tight');
-                if (exact ? r[4] !== keys[s] : r[4] > keys[s]) throw new Error('max key mismatch');
+                const tight = exact || level > 1 || t._dirty[child] === 0; // only a marked leaf's entry may be stale
+                if (tight && (r[0] !== boxes[p] || r[1] !== boxes[p + 1] || r[2] !== boxes[p + 2] || r[3] !== boxes[p + 3])) throw new Error('MBR not tight');
+                if (tight ? r[4] !== keys[s] : r[4] > keys[s]) throw new Error('max key mismatch');
                 if (keys[s] < prev) throw new Error('child keys out of order');
                 prev = keys[s];
             }
@@ -74,9 +76,8 @@ function check(t, live, exact, packed = false) {
     };
 
     visit(t._root, t._height - 1, -Infinity);
-    if (!t._pending && t._numPending !== 0) throw new Error('pending items outside pending mode');
-    if (t._pending && t._pendingStart < t._numNodes) throw new Error('pending slots overlap nodes');
-    for (let s = t._pendingStart * M, end = s + t._numPending; s < end; s++) {
+    if (t._pending && (items !== 0 || t._root !== 0 || t._numNodes !== 1)) throw new Error('pending tree with nodes');
+    for (let s = M, end = t._pending ? M + t.size : M; s < end; s++) {
         const id = ptrs[s], b = live.get(id), p = s * 4;
         items++;
         if (t._slotOf[id] !== s) throw new Error('pending slotOf mismatch');
@@ -104,7 +105,7 @@ for (let seed = 1; seed <= 12; seed++) {
     const ids = [];
     const clustered = seed % 3 === 0;
     const ops = 12000;
-    let rebuilds = 0, toggles = 0;
+    let rebuilds = 0;
 
     // some boxes fall outside the domain
     const box = () => {
@@ -155,10 +156,6 @@ for (let seed = 1; seed <= 12; seed++) {
             check(t, live, t.size > 0, t.size > 0);
             rebuilds++;
         }
-        if (rnd() < 1 / 400 && !t._pending) {
-            t._enterPending();
-            toggles++;
-        }
 
         if (op % 211 !== 0 && op !== ops - 1) continue;
 
@@ -203,7 +200,7 @@ for (let seed = 1; seed <= 12; seed++) {
     check(t, live, false);
 
     console.log(`seed ${seed} ok (${clustered ? 'clustered' : 'uniform'}; ` +
-        `in-place updates ${t.inPlace}, rebuilds ${rebuilds}, pending toggles ${toggles})`);
+        `reinserted ${t.reinserted}, rebuilds ${rebuilds})`);
 }
 
 // rebuild at sizes around one leaf, one full internal level and the radix threshold, after removes and with
@@ -266,11 +263,10 @@ for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 81
             const g = t.getBox(id);
             if (g.some((v, j) => v !== b[j])) throw new Error('getBox mismatch');
         }
-        if (i === 500 || i === 1500) t._enterPending(); // churn leaf and pending items alike, packed by a search
         if (i === 1000) {
             check(t, live, false);
             query();
-            check(t, live, t.size > 0, t.size > 0);
+            if (t.size > 0) check(t, live, true);
         }
     }
     check(t, live, false);
@@ -278,3 +274,53 @@ for (const n of [0, 1, 2, 15, 16, 17, 28, 29, 224, 225, 256, 257, 3137, 8191, 81
     if (t.size > 0) check(t, live, true);
 }
 console.log('rebuild sizes ok');
+
+// An item that moved far away must not stay in its leaf because something else wrote the leaf an exact entry first
+// (which would cover the item's new box, so the flush would take it for one that never left): a remove from the
+// leaf, a split of it, or a merge of a neighbor into it. In each case the flush has to insert the item again,
+// which puts it in the leaf whose key range holds its key.
+{
+    const rnd = mulberry32(7);
+    const fresh = () => {
+        const t = new HTree([0, 0, 1000, 1000]);
+        for (let i = 0; i < 5000; i++) t.add(rnd() * 100, rnd() * 100);
+        t.search(0, 0, 0, 0); // packed: leaves are 14 full
+        return t;
+    };
+    const leafOf = (t, id) => Math.floor(t._slotOf[id] / M);
+    const itemsOf = (t, leaf) => Array.from(t._ptrs.subarray(leaf * M, leaf * M + t._count[leaf]));
+    const settledFar = (t, id, what) => {
+        t.search(0, 0, 0, 0);
+        const e = t._entryOf(leafOf(t, id)), key = t._keys[t._slotOf[id]], b = t.getBox(id);
+        if (key !== t._key(b[0], b[1], b[2], b[3]) || key > t._keys[e] || (e % M !== 0 && key <= t._keys[e - 1])) {
+            throw new Error(`moved item kept in its leaf after ${what}`);
+        }
+    };
+    // a leaf in the middle of its parent, and an item of it sent to the far corner
+    const setup = () => {
+        const t = fresh();
+        let leaf = 0;
+        while (t._entryOf(leaf) % M !== 5) leaf++;
+        const [id, ...rest] = itemsOf(t, leaf);
+        t.update(id, 900, 900);
+        return {t, leaf, id, rest};
+    };
+
+    let s = setup();
+    s.t.remove(s.rest[0]);
+    settledFar(s.t, s.id, 'a remove from the leaf');
+
+    s = setup();
+    for (let i = 0; leafOf(s.t, s.rest[0]) === s.leaf && i < 4; i++) { // fill the leaf up and split it
+        const b = s.t.getBox(s.rest[i % 2]);
+        s.t.add(b[0], b[1]);
+    }
+    settledFar(s.t, s.id, 'a split of the leaf');
+
+    s = setup();
+    for (const k of [1, 2, 3, 4, 5, 6]) s.t.remove(s.rest[k]); // by hand below: the leaf can take a neighbor
+    const neighbor = s.t._ptrs[s.t._entryOf(s.leaf) + 1];
+    for (const id of itemsOf(s.t, neighbor).slice(0, 8)) s.t.remove(id); // the neighbor is underfull and looks for a target
+    settledFar(s.t, s.id, 'a merge into the leaf');
+    console.log('moved items ok');
+}

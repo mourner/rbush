@@ -7,9 +7,9 @@
 // children ordered by key. Unused slots hold sentinel boxes (+∞ min / −∞ max: never match a query, no-ops in MBRs)
 // and MAX_KEY, so search scans every node at full width with no counts.
 //
-// In-place updates refit the entries above lazily, before the next search. While the tree is empty, and in
-// pending mode generally, writes skip the tree: adds go to a run of slots past the last node, updates only rewrite
-// the box, and the next search packs everything with rebuild.
+// An update only writes the box and marks the leaf: before the next search, a flush takes the items that left their
+// leaves out and inserts them again, and refits the entries above. While the tree is empty, adds only fill a run of
+// slots past the root, and the first search packs them with rebuild.
 //
 // Not hardened yet: ids are not reused or validated, internal nodes are never merged on underflow, the arena grows
 // by doubling, and the Hilbert domain is fixed at construction.
@@ -28,10 +28,9 @@ const DEAD = 0xffffffff; // slotOf value of a removed id
 const FILL = 14;         // items per leaf and children per internal node written by rebuild, so inserts don't split at once
 const MERGE_BELOW = HALF; // a leaf left with fewer items merges into a neighbor...
 const MERGE_MAX = FILL;   // ...if the two hold at most this many
-const RADIX_MIN = 8192;  // below this, filling the radix count table costs more than a quicksort
+const SORT_MIN = 64;      // a flush inserts fewer moved items than this as they come, without sorting them by key
 
-/** @type {Uint32Array | undefined} */
-let radixCounts; // shared by all trees: 2^16 counts for the low key digit, 2^15 for the high one
+const radixCounts = new Uint32Array(4096); // shared by all trees: counts for key digits of 11, 10 and 10 bits
 
 export default class HTree {
     /**
@@ -41,7 +40,7 @@ export default class HTree {
     constructor(domain = [0, 0, 1, 1], capacity = 0) {
         const initialNodes = Math.max(64, packedNodes(capacity));
         this.size = 0;                                   // number of live items
-        this.inPlace = 0;                                // stats: updates that kept the item in its leaf
+        this.reinserted = 0;                             // stats: items that updates moved to another leaf
 
         const [minX, minY, maxX, maxY] = domain;
         this._minX = minX;
@@ -57,7 +56,8 @@ export default class HTree {
         this._ptrs = new Uint32Array(initialNodes * M);       // slot → item id (leaf) or child node (internal)
         this._count = new Uint8Array(initialNodes);           // node → used slots
         this._parent = new Uint32Array(initialNodes);         // node → parent node
-        // node → 1 + its level if its entry in the parent awaits a refit in _flush, else 0
+        // node → 1 + its level if its entry in the parent awaits a refit in _flush, else 0; between flushes only
+        // leaves are marked: those with updated items, whose entries may not cover them yet
         this._dirty = new Uint8Array(initialNodes);
         this._dirtyList = new Uint32Array(initialNodes);      // leaves marked in _dirty (may hold stale or repeat nodes)
         this._numDirty = 0;
@@ -67,18 +67,22 @@ export default class HTree {
 
         this._slotOf = new Uint32Array(Math.max(1024, capacity)); // id → slot holding it (leaf or pending), or DEAD
         this._nextId = 0;
-        this._scratch = new ArrayBuffer(0);                   // rebuild: sort pairs and radix buffer, kept between calls
+        this._scratch = new ArrayBuffer(0);                   // rebuild: sort pairs and box columns, kept between calls
+
+        // _flush: keys and ids of the items it takes out of their leaves (both twice as long, the second half is
+        // for sorting), and their boxes, found through _slotOf
+        this._movedKeys = new Int32Array(64);
+        this._movedIds = new Uint32Array(64);
+        this._movedBoxes = new Float64Array(128);
 
         this._height = 1;
         this._path = new Uint32Array(16);                     // level → slot taken by the last _insert descent
         this._splitKey = 0;                                   // largest key left in the lower half by _splitLeaf
         this._root = this._alloc();
 
-        // pending mode: pending items fill slots from node _pendingStart on, which stays past every allocated node
-        this._pending = false;
-        this._pendingStart = 0;
-        this._numPending = 0;
-        this._enterPending();
+        // an empty tree is pending: its root is node 0, and added items fill the slots right after it (item i of
+        // `size` in slot M + i, no keys) until the first search packs them
+        this._pending = true;
     }
 
     /**
@@ -91,9 +95,21 @@ export default class HTree {
     add(minX, minY, maxX = minX, maxY = minY) {
         const id = this._nextId++;
         if (id === this._slotOf.length) this._slotOf = grow(this._slotOf, id * 2);
+
+        if (this._pending) {
+            const s = M + this.size, p = s * 4;
+            if (s === this._capacity * M) this._growArena();
+            const boxes = this._boxes;
+            boxes[p] = minX;
+            boxes[p + 1] = minY;
+            boxes[p + 2] = maxX;
+            boxes[p + 3] = maxY;
+            this._ptrs[s] = id;
+            this._slotOf[id] = s;
+        } else {
+            this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
+        }
         this.size++;
-        if (this._pending) this._append(id, minX, minY, maxX, maxY);
-        else this._insert(id, this._key(minX, minY, maxX, maxY), minX, minY, maxX, maxY);
         return id;
     }
 
@@ -103,27 +119,27 @@ export default class HTree {
      */
     remove(id) {
         const slotOf = this._slotOf, s = slotOf[id];
-        if (!this._pending) {
-            const leaf = Math.floor(s / M);
-            this._take(s);
-            if (this._count[leaf] >= MERGE_BELOW || !this._merge(leaf)) this._refit(leaf);
-        } else if (s >= this._pendingStart * M) { // a pending item: the last pending one takes its slot
-            const last = this._pendingStart * M + --this._numPending;
+        if (this._pending) { // the last pending item takes its slot
+            const last = M + this.size - 1;
             if (s !== last) {
                 slotOf[this._ptrs[last]] = s;
                 this._copy(last, s);
             }
         } else {
-            this._take(s); // the pack walks leaves by count and rewrites every entry
+            const leaf = Math.floor(s / M);
+            this._take(s);
+            // a marked leaf keeps its entry until the flush (unless it's empty now): an exact one would cover the
+            // items that moved out of the leaf, and they would pass for items that never left
+            const n = this._count[leaf];
+            if ((n === 0 || this._dirty[leaf] === 0) && (n >= MERGE_BELOW || !this._merge(leaf))) this._refit(leaf);
         }
         slotOf[id] = DEAD;
-        if (--this.size === 0) this.rebuild(); // back to a clean empty root in pending mode
+        if (--this.size === 0) this.rebuild(); // back to a clean empty root, pending
     }
 
     /**
-     * Change an item's box, keeping its id. The item stays in its leaf if the new box fits inside the leaf's MBR
-     * (keeping its old key) or the new key is still inside the leaf's key range; otherwise it is detached and
-     * inserted again. Entries above a leaf changed in place are refit lazily, once per leaf before the next search.
+     * Change an item's box, keeping its id. This only writes the box: the flush before the next search decides
+     * whether the item stays in its leaf (see _evict) and refits the entries above, once per leaf.
      * @param {number} id
      * @param {number} minX
      * @param {number} minY
@@ -131,70 +147,22 @@ export default class HTree {
      * @param {number} [maxY=minY]
      */
     update(id, minX, minY, maxX = minX, maxY = minY) {
-        if (!this._pending) {
-            this._update(id, minX, minY, maxX, maxY);
-            return;
-        }
-        const boxes = this._boxes, p = this._slotOf[id] * 4; // the pack re-keys from the box, wherever the item is
+        const boxes = this._boxes, s = this._slotOf[id], p = s * 4;
         boxes[p] = minX;
         boxes[p + 1] = minY;
         boxes[p + 2] = maxX;
         boxes[p + 3] = maxY;
-    }
+        if (this._pending) return;
 
-    /**
-     * @param {number} id
-     * @param {number} minX
-     * @param {number} minY
-     * @param {number} maxX
-     * @param {number} maxY
-     */
-    _update(id, minX, minY, maxX, maxY) {
-        const keys = this._keys, boxes = this._boxes;
-        const s = this._slotOf[id], p = s * 4;
-        const leaf = Math.floor(s / M), base = leaf * M;
+        const leaf = Math.floor(s / M);
+        if (leaf === this._root) { // nothing above to refit, and nowhere else to go
+            this._keys[s] = this._key(minX, minY, maxX, maxY);
 
-        let key = keys[s];
-        if (leaf === this._root) {
-            key = this._key(minX, minY, maxX, maxY);
-        } else {
-            const e = this._entryOf(leaf);
-
-            // a box that fits inside the leaf's MBR stays with its old key: placement only needs a key inside the
-            // leaf's range, not the key of the current box (a marked leaf's MBR may be stale, which only costs quality)
-            const q = e * 4;
-            let stay = minX >= boxes[q] && minY >= boxes[q + 1] && maxX <= boxes[q + 2] && maxY <= boxes[q + 3];
-
-            if (!stay) {
-                key = this._key(minX, minY, maxX, maxY);
-                if (key <= keys[e]) {
-                    if (e % M !== 0) {
-                        stay = key > keys[e - 1];
-                    } else { // first child: its lower bound lives further up, so settle for the leaf's own min key
-                        let min = keys[base];
-                        for (let i = base + 1, end = base + this._count[leaf]; i < end; i++) min = Math.min(min, keys[i]);
-                        stay = key >= min;
-                    }
-                }
-                if (!stay) {
-                    // the entries above may stay too large until the flush; an emptied leaf is unlinked at once
-                    this._take(s);
-                    const n = this._count[leaf];
-                    if (n === 0) this._refit(leaf);
-                    else if (n >= MERGE_BELOW || !this._merge(leaf)) this._mark(leaf);
-                    this._insert(id, key, minX, minY, maxX, maxY);
-                    return;
-                }
-            }
-            this._mark(leaf);
+        } else if (this._dirty[leaf] === 0) {
+            this._dirty[leaf] = 1;
+            if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
+            this._dirtyList[this._numDirty++] = leaf;
         }
-
-        keys[s] = key;
-        boxes[p] = minX;
-        boxes[p + 1] = minY;
-        boxes[p + 2] = maxX;
-        boxes[p + 3] = maxY;
-        this.inPlace++;
     }
 
     /**
@@ -254,22 +222,21 @@ export default class HTree {
     /**
      * Rewrite the tree packed in key order, with items re-keyed from their current boxes: leaves and internal nodes
      * FILL / M full, laid out level by level from the start of the arena. Use it after a frame where most items
-     * moved, or to restore fill and locality after heavy churn. Also packs pending items, ending pending mode
-     * unless the tree is empty.
+     * moved, or to restore fill and locality after heavy churn. Also packs the items of a pending tree.
      */
     rebuild() {
         const n = this.size, slotOf = this._slotOf;
 
-        // scratch: (key, source slot) pairs and the radix buffer for them; after the sort, the sorted ids take the
-        // place of the keys and the radix buffer (grown to 16 bytes per item) holds two box columns at a time
+        // scratch: (key, source slot) pairs, sorted from its last third into the first; then the sorted ids take
+        // the place of the sorted keys, and two box columns at a time that of everything past the sorted slots
         if (this._scratch.byteLength < n * 24) this._scratch = new ArrayBuffer(n * 24);
         const buf = this._scratch;
-        const sortKeys = new Int32Array(buf, 0, n), from = new Uint32Array(buf, n * 4, n);
+        const sortKeys = new Int32Array(buf, 0, n * 5), from = new Uint32Array(buf, n * 4, n * 5);
         const ids = new Uint32Array(buf, 0, n), cols = new Float64Array(buf, n * 8, n * 2);
 
+        let boxes = this._boxes, m = n * 4;
         // walk the leaves rather than the ids: one cache miss per leaf instead of one per item
-        let boxes = this._boxes, m = 0;
-        const stack = [this._root * 16 + this._height - 1];
+        const stack = this._pending ? [] : [this._root * 16 + this._height - 1];
         while (stack.length > 0) {
             const next = /** @type {number} */ (stack.pop()), node = next >> 4, level = next & 15;
             const start = node * M, end = start + this._count[node];
@@ -283,16 +250,12 @@ export default class HTree {
                 from[m] = s;
             }
         }
-        for (let s = this._pendingStart * M, end = s + this._numPending; s < end; s++, m++) {
+        for (let s = M; m < n * 5; s++, m++) { // a pending tree: the run of slots past the root
             const p = s * 4;
             sortKeys[m] = this._key(boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
             from[m] = s;
         }
-        if (n >= RADIX_MIN) {
-            radixSort(sortKeys, from, new Int32Array(buf, n * 8, n), new Uint32Array(buf, n * 12, n), n);
-        } else {
-            quickSort(sortKeys, from, 0, n - 1);
-        }
+        if (n > 0) radixSort(sortKeys, from, n * 4, 0, n);
 
         // n ≤ M fits one leaf, which is then the root
         const numLeaves = n <= M ? 1 : Math.ceil(n / FILL), total = packedNodes(n);
@@ -362,12 +325,9 @@ export default class HTree {
         this._root = lo;
         this._height = height;
 
-        // after a bulk build (nothing was in the leaves), free the scratch: a tree that is rebuilt or packed again
-        // gets it back on the next pack and keeps it from then on
-        if (this._numPending === n) this._scratch = new ArrayBuffer(0);
-        this._pending = false;
-        this._numPending = 0;
-        if (n === 0) this._enterPending();
+        // after a bulk build, free the scratch: a tree that is rebuilt again gets it back and keeps it from then on
+        if (this._pending || n === 0) this._scratch = new ArrayBuffer(0);
+        this._pending = n === 0;
     }
 
     /**
@@ -383,35 +343,8 @@ export default class HTree {
 
     /** Bytes taken by allocated nodes and the id map (not counting arena slack). */
     bytes() {
-        return (this._numNodes + Math.ceil(this._numPending / M)) * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
-    }
-
-    /** Switch to pending mode: until the next search or rebuild, writes skip the tree (see add, update, remove). */
-    _enterPending() {
-        if (this._pending) return;
-        this._pending = true;
-        this._pendingStart = this._numNodes;
-        this._numPending = 0;
-    }
-
-    /**
-     * Put an item in the next pending slot.
-     * @param {number} id
-     * @param {number} minX
-     * @param {number} minY
-     * @param {number} maxX
-     * @param {number} maxY
-     */
-    _append(id, minX, minY, maxX, maxY) {
-        const s = this._pendingStart * M + this._numPending++;
-        if (s === this._capacity * M) this._growArena();
-        const p = s * 4, boxes = this._boxes;
-        this._ptrs[s] = id;
-        boxes[p] = minX;
-        boxes[p + 1] = minY;
-        boxes[p + 2] = maxX;
-        boxes[p + 3] = maxY;
-        this._slotOf[id] = s;
+        const nodes = this._pending ? 1 + Math.ceil(this.size / M) : this._numNodes;
+        return nodes * (M * (32 + 4 + 4) + 1 + 4) + this._nextId * 4;
     }
 
     /**
@@ -457,6 +390,12 @@ export default class HTree {
 
         let leaf = node, sibling = -1;
         if (count[node] === M) {
+            // a split writes exact entries, which mustn't happen to a marked leaf (see remove): flush and start over
+            if (this._dirty[node] !== 0) {
+                this._flush();
+                this._insert(id, key, minX, minY, maxX, maxY);
+                return;
+            }
             sibling = this._splitLeaf(node);
             if (key > this._splitKey) leaf = sibling;
         }
@@ -571,19 +510,16 @@ export default class HTree {
     }
 
     /**
-     * Refit the entries of leaves marked by updates (in place, or moving an item out), then the entries of all their
-     * ancestors, level by level, each node once.
+     * Settle the leaves marked by updates: take out the items that left them, refit their entries and then, level by
+     * level, the entries above that changed, each node once; then insert the items taken out.
      *
-     * Between flushes the entries above a marked leaf may be stale: its box can be too small or too large and its
-     * max key too high (keys stay inside the leaf's range, so a stale max key is still a valid separator). Other
-     * writes keep working on such a tree: insert only grows entries, and remove and split compute entries exactly
-     * from the children below. Those exact writes can leave an ancestor stale without leaving the leaf's own entry
-     * stale (a split recomputes the leaf's entry but not the entries above its parent), which is why every
-     * ancestor is refit here, changed or not.
+     * Between flushes, only the entries of marked leaves can be stale: every other entry is exact, and so is every
+     * entry of an internal node relative to its child's entries, whatever is below (insert grows them all the way
+     * down, the rest writes exact ones). That's why the refit can stop at an entry that comes out unchanged.
      */
     _flush() {
-        const dirty = this._dirty, parent = this._parent;
-        let list = this._dirtyList, next = this._dirtyNext, n = this._numDirty;
+        const dirty = this._dirty, parent = this._parent, count = this._count;
+        let list = this._dirtyList, next = this._dirtyNext, n = this._numDirty, moved = 0;
 
         // a list entry counts only if the node's mark matches the level: freed nodes are unmarked in _refit, and a
         // freed leaf may come back as an internal node that is marked at its own level; a long list is replaced by a
@@ -598,9 +534,14 @@ export default class HTree {
                 dirty[node] = 0;
                 if (node === this._root) continue;
 
-                const p = parent[node];
-                this._setEntry(this._entryOf(node), node);
+                const e = this._entryOf(node);
+                if (mark === 1) {
+                    moved = this._evict(node, e, moved);
+                    if (count[node] < MERGE_BELOW && this._merge(node)) continue;
+                }
+                if (!this._setEntry(e, node)) continue;
 
+                const p = parent[node];
                 if (dirty[p] === 0) {
                     dirty[p] = mark + 1;
                     if (m === next.length) next = grow(next, m * 2);
@@ -615,6 +556,63 @@ export default class HTree {
         this._dirtyList = list;
         this._dirtyNext = next;
         this._numDirty = 0;
+
+        // in key order, each descent follows the last one and new nodes end up next to their neighbors in the arena
+        const keys = this._movedKeys, ids = this._movedIds, boxes = this._movedBoxes, slotOf = this._slotOf;
+        const start = moved < SORT_MIN ? 0 : moved;
+        if (start > 0) radixSort(keys, ids, 0, start, moved);
+        for (let i = start; i < start + moved; i++) {
+            const id = ids[i], p = slotOf[id] * 4;
+            this._insert(id, keys[i], boxes[p], boxes[p + 1], boxes[p + 2], boxes[p + 3]);
+        }
+        this.reinserted += moved;
+    }
+
+    /**
+     * Take out of a marked leaf the items that left it, adding them to the `moved` ones (keys, ids and boxes in
+     * _movedKeys and so on); returns their new number. An item stays if its box is inside the leaf's entry `e`,
+     * like the box of any item that didn't change: it keeps its key then, as placement only needs a key in the
+     * leaf's range, not the key of the current box. It also stays, with a new key, if that key is in the range.
+     * @param {number} leaf
+     * @param {number} e
+     * @param {number} moved
+     */
+    _evict(leaf, e, moved) {
+        const boxes = this._boxes, keys = this._keys;
+        const q = e * 4, x0 = boxes[q], y0 = boxes[q + 1], x1 = boxes[q + 2], y1 = boxes[q + 3];
+        const base = leaf * M, end = base + this._count[leaf], hi = keys[e];
+
+        // the lowest key to keep: the range starts past the previous child's max key; a first child's lower bound
+        // lives further up, so it settles for the leaf's own lowest key
+        let lo = MAX_KEY;
+        if (e % M !== 0) lo = keys[e - 1] + 1;
+        else for (let s = base; s < end; s++) lo = Math.min(lo, keys[s]);
+
+        for (let s = end - 1; s >= base; s--) { // downward: _take fills the slot with the last, already seen one
+            const p = s * 4, minX = boxes[p], minY = boxes[p + 1], maxX = boxes[p + 2], maxY = boxes[p + 3];
+            if (minX >= x0 && minY >= y0 && maxX <= x1 && maxY <= y1) continue;
+
+            const key = this._key(minX, minY, maxX, maxY);
+            if (key >= lo && key <= hi) {
+                keys[s] = key;
+                continue;
+            }
+            if (moved * 2 === this._movedKeys.length) {
+                this._movedKeys = grow(this._movedKeys, moved * 4);
+                this._movedIds = grow(this._movedIds, moved * 4);
+                this._movedBoxes = grow(this._movedBoxes, moved * 8);
+            }
+            const id = this._ptrs[s], b = this._movedBoxes, o = moved * 4;
+            this._movedKeys[moved] = key;
+            this._movedIds[moved] = id;
+            b[o] = minX;
+            b[o + 1] = minY;
+            b[o + 2] = maxX;
+            b[o + 3] = maxY;
+            this._slotOf[id] = moved++; // until the item is back in a leaf: where its box is
+            this._take(s);
+        }
+        return moved;
     }
 
     /**
@@ -632,48 +630,38 @@ export default class HTree {
     }
 
     /**
-     * Move the items of an underfull leaf into the smaller of its neighbors under the same parent and free it, if
-     * the two fit in MERGE_MAX. Returns false if they don't (or the leaf is the root).
+     * Move the items of an underfull leaf into the smaller of its neighbors under the same parent, if the two fit
+     * in MERGE_MAX, and free the leaf (an empty one right away). Returns false if nothing can take the items.
+     * Marked neighbors are left alone: the target gets an exact entry, which they mustn't (see remove).
      * @param {number} leaf
      */
     _merge(leaf) {
-        if (leaf === this._root) return false;
-        const count = this._count, ptrs = this._ptrs;
-        const e = this._entryOf(leaf), first = this._parent[leaf] * M, last = first + count[this._parent[leaf]] - 1;
+        const count = this._count, ptrs = this._ptrs, n = count[leaf];
+        if (n > 0) {
+            if (leaf === this._root) return false;
+            const e = this._entryOf(leaf), first = this._parent[leaf] * M, last = first + count[this._parent[leaf]] - 1;
 
-        let t = e > first ? e - 1 : -1;
-        if (e < last && (t === -1 || count[ptrs[e + 1]] < count[ptrs[t]])) t = e + 1;
-        if (t === -1) return false;
-        const target = ptrs[t], n = count[leaf];
-        if (n + count[target] > MERGE_MAX) return false;
+            let t = -1, room = MERGE_MAX - n;
+            for (let s = e - 1; s <= e + 1; s += 2) {
+                if (s < first || s > last || count[ptrs[s]] > room || this._dirty[ptrs[s]] !== 0) continue;
+                t = s;
+                room = count[ptrs[s]] - 1; // the other neighbor has to be smaller
+            }
+            if (t === -1) return false;
 
-        const slotOf = this._slotOf;
-        let to = target * M + count[target];
-        for (let i = leaf * M, end = i + n; i < end; i++) {
-            slotOf[ptrs[i]] = to;
-            this._copy(i, to++);
+            const target = ptrs[t], slotOf = this._slotOf;
+            let to = target * M + count[target];
+            for (let i = leaf * M, end = i + n; i < end; i++) {
+                slotOf[ptrs[i]] = to;
+                this._copy(i, to++);
+            }
+            count[target] += n;
+            count[leaf] = 0;
+            this._pad(leaf * M, leaf * M + n);
+            this._setEntry(t, target); // at once: a left neighbor takes over the leaf's max key
         }
-        count[target] += n;
-        count[leaf] = 0;
-        this._pad(leaf * M, leaf * M + n);
-
-        // the target's entry must cover the leaf's key range at once (a left neighbor takes its max key); if the leaf
-        // was marked, the entries above may be too small for its items, so the target takes over the mark
-        this._setEntry(t, target);
-        if (this._dirty[leaf] !== 0) this._mark(target);
         this._refit(leaf);
         return true;
-    }
-
-    /**
-     * Mark a leaf for _flush to refit its entry and those above.
-     * @param {number} leaf
-     */
-    _mark(leaf) {
-        if (this._dirty[leaf] !== 0) return;
-        this._dirty[leaf] = 1;
-        if (this._numDirty === this._dirtyList.length) this._dirtyList = grow(this._dirtyList, this._numDirty * 2);
-        this._dirtyList[this._numDirty++] = leaf;
     }
 
     /**
@@ -844,86 +832,49 @@ function grow(arr, length) {
 }
 
 /**
- * Sort (key, value) pairs by key with two LSD radix passes, on the low 16 bits and then the high 15 (unsigned once
- * biased); the pairs move together, so both passes read sequentially.
- * @param {Int32Array} keys sorted in place
- * @param {Uint32Array} values moved along with keys
- * @param {Int32Array} keys2 scratch of the same length
- * @param {Uint32Array} values2 scratch of the same length
+ * Sort `n` (key, value) pairs by key from index `a` of both arrays to index `b`, with three LSD radix passes (on 11,
+ * 10 and 10 bits of the key, biased to be unsigned); the range at `a` is scratch afterwards.
+ * @param {Int32Array} keys
+ * @param {Uint32Array} values
+ * @param {number} a
+ * @param {number} b
  * @param {number} n
  */
-function radixSort(keys, values, keys2, values2, n) {
-    if (!radixCounts) radixCounts = new Uint32Array(0x18000);
-    const counts = radixCounts.fill(0), HI = 0x10000;
+function radixSort(keys, values, a, b, n) {
+    const counts = radixCounts.fill(0), MID = 2048, HI = 3072, BIAS = MAX_KEY + 1;
 
-    for (let i = 0; i < n; i++) {
-        const k = keys[i];
-        counts[k & 0xffff]++;
-        counts[HI + (k >> 16) + 0x4000]++;
+    for (let i = a; i < a + n; i++) {
+        const k = keys[i] + BIAS;
+        counts[k & 2047]++;
+        counts[MID + ((k >> 11) & 1023)]++;
+        counts[HI + (k >> 21)]++;
     }
-    for (let i = 0, lo = 0, hi = 0; i < 0x10000; i++) {
+    for (let i = 0, lo = 0, mid = 0, hi = 0; i < 2048; i++) {
         const c = counts[i];
         counts[i] = lo;
         lo += c;
-        if (i < 0x8000) {
-            const d = counts[HI + i];
+        if (i < 1024) {
+            const d = counts[MID + i], e = counts[HI + i];
+            counts[MID + i] = mid;
             counts[HI + i] = hi;
-            hi += d;
+            mid += d;
+            hi += e;
         }
     }
-    for (let i = 0; i < n; i++) {
-        const k = keys[i], j = counts[k & 0xffff]++;
-        keys2[j] = k;
-        values2[j] = values[i];
-    }
-    for (let i = 0; i < n; i++) {
-        const k = keys2[i], j = counts[HI + (k >> 16) + 0x4000]++;
+    for (let i = a; i < a + n; i++) {
+        const k = keys[i], j = b + counts[(k + BIAS) & 2047]++;
         keys[j] = k;
-        values[j] = values2[i];
+        values[j] = values[i];
     }
-}
-
-/**
- * Sort (key, value) pairs in [left, right] by key: quicksort, with insertion sort for short ranges.
- * @param {Int32Array} keys
- * @param {Uint32Array} values moved along with keys
- * @param {number} left
- * @param {number} right
- */
-function quickSort(keys, values, left, right) {
-    while (right - left > 16) {
-        const a = keys[left], b = keys[(left + right) >> 1], c = keys[right];
-        const pivot = (a > b) !== (a > c) ? a : (b < a) !== (b < c) ? b : c;
-        let i = left - 1, j = right + 1;
-        while (true) {
-            do i++; while (keys[i] < pivot);
-            do j--; while (keys[j] > pivot);
-            if (i >= j) break;
-            const k = keys[i], v = values[i];
-            keys[i] = keys[j];
-            values[i] = values[j];
-            keys[j] = k;
-            values[j] = v;
-        }
-        // recurse into the smaller half, loop on the larger
-        if (j - left < right - j) {
-            quickSort(keys, values, left, j);
-            left = j + 1;
-        } else {
-            quickSort(keys, values, j + 1, right);
-            right = j;
-        }
+    for (let i = b; i < b + n; i++) {
+        const k = keys[i], j = a + counts[MID + (((k + BIAS) >> 11) & 1023)]++;
+        keys[j] = k;
+        values[j] = values[i];
     }
-    for (let i = left + 1; i <= right; i++) {
-        const k = keys[i], v = values[i];
-        let j = i - 1;
-        while (j >= left && keys[j] > k) {
-            keys[j + 1] = keys[j];
-            values[j + 1] = values[j];
-            j--;
-        }
-        keys[j + 1] = k;
-        values[j + 1] = v;
+    for (let i = a; i < a + n; i++) {
+        const k = keys[i], j = b + counts[HI + ((k + BIAS) >> 21)]++;
+        keys[j] = k;
+        values[j] = values[i];
     }
 }
 
