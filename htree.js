@@ -38,6 +38,11 @@ const SORT_MIN = 64;      // a flush inserts fewer moved items than this as they
 const radixCounts = new Uint32Array(4096); // shared by all trees: counts for key digits of 11, 10 and 10 bits
 
 export default class HTree {
+    // V8's optimized code holds the maps it embeds weakly, so once the last tree dies a full GC can clear the map trees
+    // end up with (fields generalized by the first pack), deopting every method that embeds it, and the next tree
+    // rebuilds the map chain and re-optimizes them all. A small packed tree kept alive here holds that map.
+    static _warm = warmUp(new HTree());
+
     /**
      * @param {number} [capacity=0] Number of items to reserve room for (see reserve).
      */
@@ -1125,6 +1130,16 @@ export default class HTree {
         boxes[t + 2] = boxes[f + 2];
         boxes[t + 3] = boxes[f + 3];
     }
+}
+
+/**
+ * Take a new tree past its first pack (more than M items and a search).
+ * @param {HTree} tree
+ */
+function warmUp(tree) {
+    for (let i = 0; i <= M; i++) tree.add(i, i);
+    tree.search(0, 0, M, M);
+    return tree;
 }
 
 /**
